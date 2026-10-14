@@ -8,16 +8,13 @@ services:
     healthCheckPath: /login
     autoDeploy: true
     envVars:
-      # --- DB (Render 는 MySQL 을 제공하지 않으므로 외부 MySQL 값을 대시보드에서 입력) ---
-      - key: DB_HOST
+      # --- DB: TiDB Cloud(MySQL 호환, TLS 필수). 값은 대시보드에서 입력 ---
+      # URL 예: jdbc:mysql://<HOST>:4000/tanoshimi?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&sslMode=REQUIRED&allowPublicKeyRetrieval=true
+      - key: SPRING_DATASOURCE_URL
         sync: false
-      - key: DB_PORT
-        value: "3306"
-      - key: DB_NAME
-        value: tanoshimi
-      - key: DB_USERNAME
+      - key: SPRING_DATASOURCE_USERNAME
         sync: false
-      - key: DB_PASSWORD
+      - key: SPRING_DATASOURCE_PASSWORD
         sync: false
       # --- 리버스 프록시(HTTPS) 뒤에서 동작하기 위한 설정 ---
       - key: SERVER_FORWARD_HEADERS_STRATEGY
