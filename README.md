@@ -2,6 +2,8 @@
 
 **한국어** | [日本語](README.ja.md)
 
+[![CI](https://github.com/good200005/tanoshimi/actions/workflows/ci.yml/badge.svg)](https://github.com/good200005/tanoshimi/actions/workflows/ci.yml)
+
 > 한일교류 여행 파티 매칭 + 실시간 협업 일정 계획 + AI 여행 추천 서비스
 > 日韓交流旅行のパーティーマッチング + リアルタイム共同プランニング + AI旅行おすすめサービス
 
@@ -58,6 +60,20 @@
 ## 빠른 시작
 
 > 프로젝트 소스는 저장소의 [`tanoshimi/`](tanoshimi/) 디렉터리에 있습니다. 아래 명령은 그 안에서 실행하세요.
+
+### 0. Docker로 한 줄 실행 (가장 빠름)
+
+Docker가 있으면 저장소 루트에서 아래 한 줄로 MySQL 준비부터 실행까지 끝납니다.
+
+```bash
+docker compose up --build   # http://localhost:8080
+```
+
+- 최초 기동 시 `schema.sql`과 `data.sql`(데모 데이터, 모든 계정 비번 `Test1234!`)이 자동 적용됩니다.
+- 외부 연동은 `mock`, 이메일 인증번호는 앱 로그에 출력됩니다(`docker compose logs -f app`).
+- DB 초기화: `docker compose down -v`
+
+Docker 없이 직접 구성하려면 아래 1~3을 따르세요.
 
 ### 1. DB 준비 (MySQL 8)
 

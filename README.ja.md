@@ -2,6 +2,8 @@
 
 [한국어](README.md) | **日本語**
 
+[![CI](https://github.com/good200005/tanoshimi/actions/workflows/ci.yml/badge.svg)](https://github.com/good200005/tanoshimi/actions/workflows/ci.yml)
+
 > 日韓交流旅行のパーティーマッチング + リアルタイム共同プランニング + AI旅行おすすめサービス
 
 **「楽しみ(タノシミ)」= 期待・ワクワク。** 旅行に*一緒に行く人探し*から*プラン作成*、*帰ってからの記録*までを、ひとつのサービスでつなぎます。
@@ -67,6 +69,20 @@
 
 > ソースコードはリポジトリの [`tanoshimi/`](tanoshimi/) ディレクトリにあります。以下のコマンドはその中で実行してください。
 
+### 0. Docker で一発起動 (最短)
+
+Docker があれば、MySQL の準備から起動までコマンド1つで完了します(リポジトリルートで実行)。
+
+```bash
+docker compose up --build   # http://localhost:8080
+```
+
+- 初回起動時に `schema.sql` と `data.sql`(デモデータ、全アカウントのパスワード: `Test1234!`)が自動で適用されます。
+- 外部連携は `mock`、メール認証コードはアプリのログに出力されます (`docker compose logs -f app`)。
+- DB を初期化するには `docker compose down -v` を実行します。
+
+Docker を使わず手動で構築する場合は、以下の 1〜3 に従ってください。
+
 ### 1. DBの準備 (MySQL 8)
 
 ```bash
@@ -107,6 +123,8 @@ cp src/main/resources/application-local.yml.example src/main/resources/applicati
 tanoshimi/                      # リポジトリルート
 ├── README.md                   # 韓国語版
 ├── README.ja.md                # (このファイル)
+├── docker-compose.yml          # MySQL + アプリの一発起動
+├── .github/workflows/          # CI (ci.yml), CodeQL, Pages
 ├── docs/                       # 開発成果物ドキュメント
 └── tanoshimi/                  # Spring Boot アプリケーション
     ├── build.gradle
@@ -138,6 +156,7 @@ tanoshimi/                      # リポジトリルート
 | [02. 要件定義書](docs/02-요구사항-정의서.md) | モジュール別の機能要件(FR)、非機能要件(NFR)、エラーコード |
 | [03. 画面設計書 (UI)](docs/03-화면설계서.md) | 画面一覧、ルーティング、画面別の構成要素・動作、フロントエンド構成 |
 | [04. ERD・テーブル設計書](docs/04-ERD-테이블설계서.md) | エンティティ関連図、テーブル定義、主要カラム・制約・インデックス |
+| [07. 構成図・認証ER図・主要フロー](tanoshimi/docs/07-구성도-ER도.md) | システム構成図、認証モジュールのER図、パスワード再発行フロー、例外処理の分岐 (Mermaid) |
 | [db/ フォルダ案内](tanoshimi/src/main/resources/db/README.md) | ローカルDBのセットアップ順序、マイグレーション・シードファイルの説明 |
 
 ## チーム
@@ -217,7 +236,22 @@ tanoshimi/                      # リポジトリルート
   - **試して捨てた方法**: `@ExceptionHandler` 内で新しい例外(`ResponseStatusException`)を投げる方式は、「Failure in @ExceptionHandler」として500になる(ログで確認)。最終的に `HttpServletResponse#sendError` で応答を確定させ、コンテナ標準のエラーディスパッチ経由で `error/{status}.html` を表示させた。
 - **Result**: 他モジュールも同じ例外体系を使え、API/画面の双方でエラー応答が統一された。コード上のコメントだけでは正常に見えたが、**実際に動かして初めて気づけた**問題で、「コードを読むだけでなく実機で検証する」姿勢を学んだ。
 
-<!-- TODO(本人確認): 実測できる数値(テスト件数・カバレッジ、API応答時間など)が分かれば Result に追記すると説得力が増します。 -->
+### テストと品質(実測値)
+
+`./gradlew test` と JaCoCo で測定しました(プロジェクト全体のカバレッジは約25%のため、担当した認証モジュールのみを記載)。
+
+| 指標 | 結果 |
+|---|---|
+| 全体のテスト | 213件すべて成功 (失敗・エラー・スキップ 0件) |
+| 認証関連のテスト | 13クラス・67件すべて成功 |
+| 認証パッケージ (`auth`) のカバレッジ | ライン 69.4% / 分岐 72.0% |
+| `EmailVerificationService` | ライン 97.4% / 分岐 85.7% |
+| `SocialLoginResolver` | ライン 100% / 分岐 100% |
+| `LoginAttemptService` | ライン 84.2% / 分岐 83.3% |
+| `UserService` (パスワード再発行を含む) | ライン 92.2% / 分岐 70.8% |
+| `GlobalExceptionHandler` | ライン 77.8% / 分岐 77.3% |
+
+※ JaCoCo はビルド設定に組み込み済みで、`./gradlew test` でレポート (`build/reports/jacoco/test/`) が生成されます。CI (GitHub Actions) でも同じテストを自動実行し、カバレッジレポートを artifact として保存します。
 
 ## 開発ルール
 
