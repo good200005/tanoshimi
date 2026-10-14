@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: tanoshimi
+    runtime: docker
+    plan: free
+    dockerfilePath: ./tanoshimi/Dockerfile
+    dockerContext: ./tanoshimi
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      # --- DB (Render 는 MySQL 을 제공하지 않으므로 외부 MySQL 값을 대시보드에서 입력) ---
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "3306"
+      - key: DB_NAME
+        value: tanoshimi
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      # --- 리버스 프록시(HTTPS) 뒤에서 동작하기 위한 설정 ---
+      - key: SERVER_FORWARD_HEADERS_STRATEGY
+        value: framework
+      - key: SERVER_SERVLET_SESSION_COOKIE_SECURE
+        value: "true"
+      # --- 운영 설정 ---
+      - key: SPRING_THYMELEAF_CACHE
+        value: "true"
+      - key: LOGGING_LEVEL_NET_DATASA_TANOSHIMI
+        value: INFO
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+      - key: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+        value: "5"
+      - key: REMEMBER_ME_KEY
+        generateValue: true
+      # --- 소셜 로그인: 값이 비어 있으면 앱이 기동 실패하므로 dummy 로 둔다(소셜 버튼만 동작 안 함). 키 발급 후 교체 ---
+      - key: GOOGLE_CLIENT_ID
+        value: dummy
+      - key: GOOGLE_CLIENT_SECRET
+        value: dummy
+      - key: NAVER_CLIENT_ID
+        value: dummy
+      - key: NAVER_CLIENT_SECRET
+        value: dummy
+      - key: LINE_CLIENT_ID
+        value: dummy
+      - key: LINE_CLIENT_SECRET
+        value: dummy
