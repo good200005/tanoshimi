@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    
+    <title>칭호 관리 | 타노시미 - Tanoshimi</title>
+    
+    <link rel="icon" type="image/svg+xml" href="/tanoshimi/assets/favicon.svg">
+
+    <link rel="stylesheet" href="/tanoshimi/css/app.css">
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard-dynamic-subset.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&family=Fraunces:opsz,wght,SOFT@9..144,500..700,100&display=swap" rel="stylesheet">
+
+    <!-- CSP 통신(인라인 스크립트 대응)을 위한 함수 구조 -->
+    <script>
+        window.api = {
+            async get(url) {
+                try {
+                    const r = await fetch(url);
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async post(url, data) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = { 'Content-Type': 'application/json' };
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+
+                try {
+                    const r = await fetch(url, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(data)
+                    });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async patch(url, data={}) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = { 'Content-Type': 'application/json' };
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+                try {
+                    const r = await fetch(url, { method: 'PATCH', headers: headers, body: JSON.stringify(data) });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async del(url) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = {};
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+                try {
+                    const r = await fetch(url, { method: 'DELETE', headers: headers });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            }
+        };
+    </script>
+    <script src="/tanoshimi/js/report.js" defer></script>
+    <!-- 실시간 알림용 웹소켓 라이브러리 - 외부 CDN 대신 저장소에 둔 사본(static/vendor, CDN 과 같은
+         sockjs-client 1.6.1 / stomp.js 2.3.3)을 쓴다. CDN 이 오염되면 변조된 스크립트가 모든 화면에서
+         실행될 수 있어서(CodeQL js/functionality-from-untrusted-source). -->
+    <script src="/tanoshimi/vendor/sockjs.min.js"></script>
+    <script src="/tanoshimi/vendor/stomp.min.js"></script>
+    <script src="/tanoshimi/js/notifications.js" defer></script>
+<script>window.__STATIC_DEMO__=true;</script></head>
+  <style>
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      background:radial-gradient(ellipse at top left, rgba(255,255,255,.35), transparent 55%), var(--parchment);
+      color:var(--ink); font-family:'Gowun Dodum','Apple SD Gothic Neo',sans-serif; line-height:1.6;
+    }
+    h1,h2,h3,.disp{ font-family:var(--font-display),'Gowun Dodum',sans-serif; color:var(--forest-deep); margin:0; }
+    a{ color:var(--forest-deep); text-decoration:none; }
+    .wrap{ max-width:980px; margin:0 auto; padding:26px 22px 90px; }
+    .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; }
+    .btn{
+      font-family:'Gowun Dodum',sans-serif; font-weight:700; font-size:12.5px; border:none; border-radius:9px;
+      padding:8px 14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+    }
+    .btn:focus-visible{ outline:3px solid var(--gold); outline-offset:2px; }
+    .btn-forest{ background:var(--forest); color:#fff; box-shadow:0 3px 0 var(--forest-deep); }
+    .btn-forest:active{ transform:translateY(2px); box-shadow:0 1px 0 var(--forest-deep); }
+    .btn-ghost{ background:var(--card); color:var(--forest-deep); border:1.5px solid var(--line); }
+    .btn-ghost:hover{ border-color:var(--sash); color:var(--sash-deep); }
+
+    .sec-head{ display:flex; align-items:baseline; gap:10px; margin:34px 0 12px; flex-wrap:wrap; }
+    .sec-head h2{ font-size:18px; }
+
+    /* ===================== 칭호 관리 뷰 ===================== */
+    .tm-head{ display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+    .back-btn{
+      display:inline-block; font-size:13px; color:var(--forest-deep); background:var(--card); border:1.5px solid var(--line);
+      border-radius:10px; padding:8px 13px; cursor:pointer; font-family:'Gowun Dodum',sans-serif; font-weight:700;
+    }
+    .back-btn:hover{ border-color:var(--sash); color:var(--sash-deep); }
+    .rep-card{ display:flex; align-items:center; gap:18px; padding:22px 24px; margin-bottom:22px; flex-wrap:wrap; }
+    .rep-badge{
+      width:76px; height:76px; flex:none; border-radius:20px; background:rgba(224,121,63,.1);
+      border:2px solid var(--sash); display:flex; align-items:center; justify-content:center; font-size:38px;
+    }
+    .rep-info .lbl{ font-size:11.5px; color:var(--ink-soft); letter-spacing:.04em; }
+    .rep-info .rep-name{ font-family:var(--font-display); font-size:22px; color:var(--forest-deep); margin:3px 0 2px; }
+    .rep-info .rep-cond{ font-size:12.5px; color:var(--ink-soft); }
+    .rep-edit{ margin-left:auto; }
+
+    .tgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; }
+    .tcat{
+      grid-column:1/-1; display:flex; align-items:baseline; gap:10px; margin:14px 2px 2px;
+      font-family:var(--font-display); font-size:15px; color:var(--forest-deep);
+      border-bottom:1.5px dashed var(--line); padding-bottom:6px;
+    }
+    .tcat:first-child{ margin-top:0; }
+    .tcat-count{ font-size:11px; color:var(--ink-soft); margin-left:auto; font-family:'Gowun Dodum',sans-serif; }
+    .tcard{
+      position:relative; padding:16px 14px; border-radius:14px; border:1px solid var(--line); background:var(--card);
+      text-align:center; transition:transform .15s, box-shadow .15s;
+    }
+    .tcard.owned{ border-color:var(--sash); background:rgba(224,121,63,.06); }
+    .tcard.owned:hover{ transform:translateY(-2px); box-shadow:0 6px 16px rgba(59,44,20,.12); }
+    .tcard.rep{ outline:2.5px solid var(--gold); outline-offset:1px; }
+    .tcard.locked{ opacity:.55; filter:grayscale(1); background:var(--parchment-deep); border-style:dashed; cursor:help; }
+    .tcard.locked .tc-ic{ opacity:.5; }
+    .tcard .tc-ic{ font-size:30px; }
+    .tcard .tc-name{ font-family:var(--font-display); font-size:14px; color:var(--forest-deep); margin-top:6px; }
+    .tcard.locked .tc-name{ color:var(--ink-soft); }
+    .tcard .tc-badge{ position:absolute; top:8px; right:8px; font-size:10px; padding:2px 7px; border-radius:999px; font-weight:700; }
+    .tcard .tc-badge.on{ background:var(--gold); color:#fff; }
+    .tcard .tc-lock{
+      position:absolute; top:7px; right:7px; font-size:10px; font-weight:700; color:var(--ink-soft);
+      background:rgba(0,0,0,.06); border-radius:999px; padding:2px 7px; display:inline-flex; align-items:center; gap:3px;
+    }
+    .tc-tip{
+      position:fixed; z-index:60; background:var(--forest-deep); color:#fff; font-size:11.5px; padding:6px 11px;
+      border-radius:8px; pointer-events:none; opacity:0; transform:translateY(4px); transition:.15s;
+      max-width:200px; text-align:center;
+    }
+    .tc-tip.show{ opacity:1; transform:translateY(0); }
+
+    /* ===================== 모달(대표 칭호) ===================== */
+    .modal{ position:fixed; inset:0; background:rgba(30,22,14,.42); display:none; align-items:center; justify-content:center; z-index:80; padding:20px; }
+    .modal.show{ display:flex; }
+    .modal-panel{ background:var(--card); border:1px solid var(--line); border-radius:18px; padding:22px; width:min(460px,100%); box-shadow:0 20px 50px rgba(30,22,14,.3); }
+    .modal-panel h3{ font-family:var(--font-display); color:var(--forest-deep); margin:0 0 4px; font-size:18px; }
+    .modal-panel .m-sub{ font-size:12.5px; color:var(--ink-soft); margin-bottom:16px; }
+    .m-list{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:18px; max-height:320px; overflow-y:auto; }
+    .m-opt{
+      display:flex; align-items:center; gap:9px; padding:11px 13px; border-radius:12px; border:1.5px solid var(--line);
+      background:var(--parchment); cursor:pointer; transition:.12s;
+    }
+    .m-opt:hover{ border-color:var(--sash); }
+    .m-opt.sel{ border-color:var(--sash); background:rgba(224,121,63,.1); box-shadow:0 0 0 2px rgba(224,121,63,.15); }
+    .m-opt .mo-ic{ font-size:22px; }
+    .m-opt .mo-name{ font-family:var(--font-display); font-size:13.5px; color:var(--forest-deep); }
+    .m-actions{ display:flex; gap:9px; justify-content:flex-end; }
+
+    .toast{
+      position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px);
+      background:var(--forest-deep); color:#fff; font-size:13px; padding:10px 18px; border-radius:999px;
+      box-shadow:0 6px 16px rgba(59,44,20,.3); opacity:0; pointer-events:none; transition:.25s; z-index:90;
+    }
+    .toast.on{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+    @media (max-width:640px){ .rep-edit{ margin-left:0; } }
+    @media (prefers-reduced-motion:reduce){ *{ transition:none !important; animation:none !important; } }
+  </style>
+</head>
+<div style="background:#1f2937;color:#fff;font:13px/1.4 sans-serif;padding:6px 12px;text-align:center">정적 데모 화면입니다. 로그인·저장·채팅 등 서버 기능은 동작하지 않습니다.</div>
+
+<header class="site-header">
+    <div class="hdr">
+
+        <!-- 왼쪽 : 로고 + 주요 메뉴 -->
+        <div class="hdr-left">
+            <a href="/tanoshimi/" class="brand">
+                <span class="brand-mark" aria-hidden="true">楽</span>
+                <span class="brand-word">Tanoshimi</span>
+            </a>
+            <nav class="gnb-main hide-mobile">
+                <a href="/tanoshimi/recommendations">관광지 둘러보기</a>
+                <a href="/tanoshimi/party-board">파티 찾기</a>
+                <a href="/tanoshimi/board">여행 스냅</a>
+                <a href="/tanoshimi/my-parties">내 파티</a>
+            </nav>
+        </div>
+
+        <!-- 오른쪽 : 언어 / 계정 / 알림 / 메뉴 -->
+        <div class="hdr-right">
+
+            <div class="lang-seg hide-mobile">
+                <a href="?lang=ko" class="on">KO</a>
+                <a href="?lang=ja">JP</a>
+            </div>
+
+            
+
+            
+                <!-- 프로필 + 드롭다운 -->
+                <div id="profile-menu-wrap" style="position:relative;">
+                    <div class="profile-btn" id="profile-btn">
+                        
+                        <div class="avatar-txt">유</div>
+                        <span class="profile-name hide-mobile">유자차</span>
+                    </div>
+
+                    <div class="menu-pop" id="profile-dropdown" style="display:none;">
+                        
+                        <a href="/tanoshimi/mypage">마이페이지</a>
+                        <a href="/tanoshimi/mypage/account">계정 관리</a>
+                        <form action="/tanoshimi/logout" method="post">
+                            <button type="submit" class="danger">로그아웃</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 알림 -->
+                <div class="notif-wrap">
+                    <span class="notif-bell" id="top-notif-bell" role="button" aria-label="알림">
+                        🔔
+                        <span class="notif-badge" id="top-notif-badge">0</span>
+                    </span>
+                    <div class="notif-dropdown" id="top-notif-dropdown" style="display:none;">
+                        <div class="notif-dropdown-title">신규 알림</div>
+                        <div class="notif-list" id="top-notif-list">
+                            <p class="notif-empty">새로운 알림이 없습니다.</p>
+                        </div>
+                    </div>
+                </div>
+            
+
+            <button id="sidebar-toggle-btn" class="menu-btn" aria-label="전체 메뉴">☰</button>
+        </div>
+    </div>
+
+    <!-- 임시 비밀번호로 로그인한 경우 강제 비밀번호 변경 모달 (비밀번호 재발급 워크플로우).
+         닫기/취소 버튼이 없다 - 바꾸기 전까지는 어떤 페이지를 가든 다시 뜬다. -->
+    
+     
+    
+
+    <!-- 우측 슬라이드 메뉴 (id 는 아래 스크립트가 잡습니다) -->
+    <div id="right-sidebar" class="side-panel">
+        <div class="side-panel-head">
+            <h2>MENU</h2>
+            <button id="sidebar-close-btn" aria-label="닫기">✕</button>
+        </div>
+        <ul class="side-nav">
+            
+            <li><a href="/tanoshimi/recommendations">⛩️ 관광지 둘러보기</a></li>
+            <li><a href="/tanoshimi/party-board">👫 파티 찾기</a></li>
+            <li><a href="/tanoshimi/board">📸 여행 스냅</a></li>
+            <li><a href="/tanoshimi/my-parties">🧳 내 파티</a></li>
+            <li><a href="/tanoshimi/messages">💬 개인 메시지함</a></li>
+            <li><a href="/tanoshimi/planner">🗾 여행 플래너</a></li>
+        </ul>
+    </div>
+
+    <script>
+        document.getElementById('profile-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = document.getElementById('profile-dropdown');
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        document.getElementById('top-notif-bell')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = document.getElementById('top-notif-dropdown');
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        const sidebar = document.getElementById('right-sidebar');
+        document.getElementById('sidebar-toggle-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.style.right = '0';
+            document.body.classList.add('sidebar-open');
+        });
+        document.getElementById('sidebar-close-btn')?.addEventListener('click', () => {
+            sidebar.style.right = '-320px';
+            document.body.classList.remove('sidebar-open');
+        });
+
+        document.addEventListener('click', (e) => {
+            const dp1 = document.getElementById('profile-dropdown');
+            if(dp1 && !dp1.contains(e.target)) dp1.style.display = 'none';
+
+            const dp2 = document.getElementById('top-notif-dropdown');
+            if(dp2 && !dp2.contains(e.target)) dp2.style.display = 'none';
+
+            if (sidebar && sidebar.style.right === '0px' && !sidebar.contains(e.target)) {
+                sidebar.style.right = '-320px';
+                document.body.classList.remove('sidebar-open');
+            }
+        });
+    </script>
+</header>
+
+<main class="wrap">
+
+  <!-- [v20 신규] 예전에는 /mypage 안에서 JS로 이 뷰만 감췄다 보여줬는데, 뒤로가기를 누르면
+       칭호 관리 화면이 아니라 메인 페이지로 나가버리는 문제가 있어 실제 URL(/mypage/titles)이
+       있는 별도 페이지로 분리했다. 카탈로그(38종 8카테고리)는 mypage-titles-manage.js 가
+       그리고, 획득 여부는 서버가 내려준 ownedCodes 와 대조해서 정한다. -->
+  <span id="titles-meta" hidden data-rep-title="탐험가"></span>
+
+  <div class="tm-head">
+    <a href="/tanoshimi/mypage" class="back-btn">‹ 마이페이지</a>
+    <h1 style="font-size:22px;">칭호 관리</h1>
+  </div>
+
+  <section class="card rep-card">
+    <div class="rep-badge" id="rep-badge">🏷️</div>
+    <div class="rep-info">
+      <div class="lbl">현재 대표 칭호</div>
+      <div class="rep-name" id="rep-name">아직 없음</div>
+      <div class="rep-cond" id="rep-cond">첫 여행을 완료하면 칭호가 열려요</div>
+    </div>
+    <button type="button" class="btn btn-ghost rep-edit" id="btn-rep-edit">✍ 수정</button>
+  </section>
+
+  <div class="sec-head" style="margin-top:0;"><h2>전체 칭호</h2></div>
+
+  <!-- 칭호 전체 목록(미획득 포함). mypage-titles-manage.js 가 이 data-* 를 읽어 카드를 그린다.
+       엔티티를 JS 로 직렬화하지 않고 마크업에 실어 보내는 방식(단일 출처). -->
+  <div id="titles-data" hidden>
+    <span data-code="T1" data-name="첫 발자국" data-category="여행 횟수" data-cond="여행 1회" data-icon="👣" data-owned="true"></span><span data-code="T15" data-name="탐험가" data-category="여행 횟수" data-cond="여행 15회" data-icon="🧭" data-owned="true"></span><span data-code="T30" data-name="베테랑" data-category="여행 횟수" data-cond="여행 30회" data-icon="🎖️" data-owned="true"></span><span data-code="T50" data-name="여행마스터" data-category="여행 횟수" data-cond="여행 50회" data-icon="🏆" data-owned="false"></span><span data-code="T80" data-name="여행의 신" data-category="여행 횟수" data-cond="여행 80회" data-icon="👑" data-owned="false"></span><span data-code="T100" data-name="지구는 내 앞마당" data-category="여행 횟수" data-cond="여행 100회" data-icon="🌍" data-owned="false"></span><span data-code="R_ALL8" data-name="8도 정복자" data-category="국내 지역 다양성" data-cond="전국 8개 권역 완료" data-icon="🗾" data-owned="true"></span><span data-code="R_JEJU" data-name="감귤 마니아" data-category="국내 지역 다양성" data-cond="제주 5회 이상" data-icon="🍊" data-owned="true"></span><span data-code="R_GS" data-name="명예 경상도인" data-category="국내 지역 다양성" data-cond="비거주자 경상도 5회 이상" data-icon="🌾" data-owned="false"></span><span data-code="R_JL" data-name="명예 전라도인" data-category="국내 지역 다양성" data-cond="비거주자 전라도 5회 이상" data-icon="🍚" data-owned="false"></span><span data-code="R_CC" data-name="명예 충청도인" data-category="국내 지역 다양성" data-cond="비거주자 충청도 5회 이상" data-icon="🏞️" data-owned="false"></span><span data-code="R_GW" data-name="명예 강원도인" data-category="국내 지역 다양성" data-cond="비거주자 강원도 5회 이상" data-icon="⛰️" data-owned="false"></span><span data-code="R_GG" data-name="명예 경기도인" data-category="국내 지역 다양성" data-cond="비거주자 경기도 5회 이상" data-icon="🏙️" data-owned="false"></span><span data-code="M_SEOUL" data-name="한강뷰 마스터" data-category="광역시 특색" data-cond="서울 5회 이상" data-icon="🌉" data-owned="true"></span><span data-code="M_BUSAN" data-name="부산 갈매기" data-category="광역시 특색" data-cond="부산 5회 이상" data-icon="🦭" data-owned="true"></span><span data-code="M_DAEGU" data-name="대프리카 정복자" data-category="광역시 특색" data-cond="대구 5회 이상" data-icon="🔥" data-owned="false"></span><span data-code="M_INCHEON" data-name="인천상륙작전러" data-category="광역시 특색" data-cond="인천 5회 이상" data-icon="⚓" data-owned="false"></span><span data-code="M_GWANGJU" data-name="예향 마니아" data-category="광역시 특색" data-cond="광주 5회 이상" data-icon="🎨" data-owned="false"></span><span data-code="M_DAEJEON" data-name="노잼도시 재발견자" data-category="광역시 특색" data-cond="대전 5회 이상" data-icon="🏢" data-owned="false"></span><span data-code="M_ULSAN" data-name="고래축제 단골" data-category="광역시 특색" data-cond="울산 5회 이상" data-icon="🐋" data-owned="false"></span><span data-code="M_SEJONG" data-name="신도시 얼리어답터" data-category="광역시 특색" data-cond="세종 5회 이상" data-icon="🌆" data-owned="false"></span><span data-code="J_KANSAI" data-name="간사이 마스터" data-category="일본 권역" data-cond="간사이 5회 이상" data-icon="🏯" data-owned="true"></span><span data-code="J_HOKKAIDO" data-name="홋카이도 마스터" data-category="일본 권역" data-cond="홋카이도 5회 이상" data-icon="❄️" data-owned="false"></span><span data-code="J_KANTO" data-name="간토 마스터" data-category="일본 권역" data-cond="간토 5회 이상" data-icon="🗼" data-owned="false"></span><span data-code="J_KYUSHU" data-name="규슈 마스터" data-category="일본 권역" data-cond="규슈 5회 이상" data-icon="♨️" data-owned="false"></span><span data-code="J_OKINAWA" data-name="오키나와 마스터" data-category="일본 권역" data-cond="오키나와 5회 이상" data-icon="🏝️" data-owned="false"></span><span data-code="MAN40" data-name="매너왕" data-category="매너온도" data-cond="매너온도 40도 이상" data-icon="🔥" data-owned="false"></span><span data-code="MAN45" data-name="매너요정" data-category="매너온도" data-cond="매너온도 45도 이상" data-icon="🧚" data-owned="false"></span><span data-code="MAN50" data-name="매너의 신" data-category="매너온도" data-cond="매너온도 50도(만점)" data-icon="😇" data-owned="false"></span><span data-code="P_HOST" data-name="파티리더" data-category="파티 활동" data-cond="파티 개설 10회 이상" data-icon="🎪" data-owned="true"></span><span data-code="P_JOIN" data-name="프로참석러" data-category="파티 활동" data-cond="파티 참여 10회 이상" data-icon="🙋" data-owned="true"></span><span data-code="D400" data-name="천리길 시작" data-category="여행 거리" data-cond="누적 400km 이상" data-icon="🚶" data-owned="false"></span><span data-code="D1000" data-name="장거리 신고식" data-category="여행 거리" data-cond="누적 1,000km 이상" data-icon="✈️" data-owned="false"></span><span data-code="D5000" data-name="트래블 홀릭" data-category="여행 거리" data-cond="누적 5,000km 이상" data-icon="🧳" data-owned="false"></span><span data-code="D10000" data-name="지구 쿼터 클럽" data-category="여행 거리" data-cond="누적 10,000km 이상" data-icon="🌐" data-owned="false"></span><span data-code="D20000" data-name="지구 반바퀴 클럽" data-category="여행 거리" data-cond="누적 20,000km 이상" data-icon="🛰️" data-owned="false"></span><span data-code="D40000" data-name="지구 한바퀴 클럽" data-category="여행 거리" data-cond="누적 40,000km 이상" data-icon="🚀" data-owned="false"></span><span data-code="A_NIGHT" data-name="야경 헌터" data-category="액티비티" data-cond="야경 스냅 5회 이상 등록" data-icon="🌃" data-owned="false"></span><span data-code="A_FEST" data-name="축제 마니아" data-category="액티비티" data-cond="축제 스타일 파티 5회 완료" data-icon="🎆" data-owned="true"></span><span data-code="A_MAP" data-name="지도 수집가" data-category="액티비티" data-cond="10개 이상 지역 방문" data-icon="🗺️" data-owned="true"></span><span data-code="COLLECTOR" data-name="지도 수집가" data-cond="5개 이상 지역 방문" data-icon="globe" data-owned="false"></span>
+  </div>
+
+  <div class="tgrid" id="tgrid"></div>
+  <p style="font-size:12px; color:var(--ink-soft); margin-top:14px;">
+    잠긴 칭호에 마우스를 올리면 해금 조건이 표시됩니다.
+  </p>
+
+</main>
+
+<!-- 대표 칭호 설정 모달 (POST /api/mypage/titles/equip 로 저장) -->
+<div class="modal" id="rep-modal">
+  <div class="modal-panel">
+    <h3>대표 칭호 설정</h3>
+    <p class="m-sub">획득한 칭호 중에서 대표로 표시할 칭호를 골라주세요.</p>
+    <div class="m-list" id="m-list"></div>
+    <div class="m-actions">
+      <button type="button" class="btn btn-ghost" id="m-cancel">취소</button>
+      <button type="button" class="btn btn-forest" id="m-confirm">확인</button>
+    </div>
+  </div>
+</div>
+
+<div class="tc-tip" id="tc-tip"></div>
+<div class="toast" id="toast"></div>
+
+<!-- CSRF 토큰을 붙이는 공용 fetch 래퍼(window.api). 아래 스크립트가 의존하므로 먼저 로드한다. -->
+<script src="/tanoshimi/js/csrf.js"></script>
+<script src="/tanoshimi/js/mypage-titles-manage.js"></script>
+
+<footer class="site-footer">
+    <div class="seigaiha" style="--wave:rgba(143,178,230,.13); position:absolute; inset:0; opacity:.7; pointer-events:none;"></div>
+
+    <div class="footer-inner">
+        <div class="footer-brand">
+            <span class="brand" style="color:#fff;">
+                <span class="brand-mark" aria-hidden="true">楽</span>
+                <span class="brand-word">Tanoshimi</span>
+            </span>
+            <p>혼자여도 괜찮고, 같이면 더 좋은 여행.<br>타노시미는 같은 날 같은 도시로 떠나는 사람들을 이어줍니다.</p>
+        </div>
+
+        <nav class="footer-nav">
+            <div class="footer-col">
+                <h4>둘러보기</h4>
+                <a href="/tanoshimi/party-board">파티 찾기</a>
+                <a href="/tanoshimi/recommendations">관광지 둘러보기</a>
+                <a href="/tanoshimi/board">여행 스냅</a>
+                <a href="/tanoshimi/planner">여행 플래너</a>
+            </div>
+            <div class="footer-col">
+                <h4>내 계정</h4>
+                <a href="/tanoshimi/mypage">마이페이지</a>
+                <a href="/tanoshimi/my-parties">내 파티</a>
+                <a href="/tanoshimi/messages">메시지함</a>
+            </div>
+            <div class="footer-col">
+                <h4>고객지원</h4>
+                <a href="/tanoshimi/support/write">문의하기</a>
+                <a href="/tanoshimi/support">문의 내역</a>
+            </div>
+        </nav>
+    </div>
+
+    <div class="footer-base">
+        <span>© 2026 Tanoshimi. 팀 프로젝트용 데모 서비스입니다.</span>
+        <span>사진 : Wikimedia Commons (CC BY-SA) · 자세한 출처는 /assets/theme/CREDITS.txt</span>
+    </div>
+</footer>
+</body>
+</html>

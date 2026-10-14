@@ -1,0 +1,49 @@
+@charset "UTF-8";
+/* party/board.html 오른쪽 검색/필터 패널 (TNSM-54).
+   「藍」 디자인 시스템 기준으로 재작성 — 색·간격·반경은 전부 app.css 의 토큰을 씁니다.
+   아고다/스카이스캐너처럼 "필터는 조용하고, 결과가 주인공"이 되도록 톤을 낮췄습니다. */
+
+.filter-panel{
+    position:sticky; top:86px;
+    background:var(--surface);
+    border:1px solid var(--hairline-cool);
+    border-radius:var(--r-lg);
+    box-shadow:var(--sh-1);
+    padding:22px;
+}
+
+/* 패널 제목 : 세로 쪽빛 라인 + 명조 */
+.filter-panel h2{
+    position:relative;
+    font-size:15px; margin:0 0 20px; padding-left:12px;
+    letter-spacing:.02em;
+}
+.filter-panel h2::before{
+    content:''; position:absolute; left:0; top:4px; bottom:4px;
+    width:3px; border-radius:2px; background:var(--ai-600);
+}
+
+.filter-label{
+    display:block;
+    font-size:10.5px; font-weight:800; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--ink-faint);
+    margin-bottom:7px;
+}
+
+.filter-row{ display:flex; gap:6px; margin-bottom:18px; }
+.filter-row.filter-row-submit{ margin-bottom:0; padding-top:4px; gap:8px; }
+.filter-row-submit .filter-input{ flex:0 0 92px; }
+
+.filter-input{ flex:1; min-width:0; }
+.filter-select{ margin-bottom:18px; }
+
+.filter-submit-btn{ flex:1; width:auto; padding:13px; }
+
+/* 필터 그룹 사이를 헤어라인으로 나눠 스캔하기 쉽게 */
+.filter-panel .filter-sep{
+    height:1px; background:var(--hairline-cool); margin:4px 0 18px; border:none;
+}
+
+@media(max-width:900px){
+    .filter-panel{ position:static; }
+}

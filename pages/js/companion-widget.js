@@ -1,0 +1,451 @@
+/**
+ * 여행 도우미 마스코트 위젯 - Live2D 캐릭터 렌더링 + 채팅 UI.
+ */
+(function () {
+    const MODEL_URL = '/model/mimi/dog.model3.json';
+    const STORAGE_KEY = 'tanoshimi_companion_chat_history';
+    const MAX_STORED_TURNS = 20;
+
+    const canvas = document.getElementById('companion-canvas');
+    const toggleBtn = document.getElementById('companion-toggle');
+    const panel = document.getElementById('companion-chat-panel');
+    const closeBtn = document.getElementById('companion-chat-close');
+    const log = document.getElementById('companion-chat-log');
+    const input = document.getElementById('companion-chat-input');
+    const sendBtn = document.getElementById('companion-chat-send');
+
+    
+    const showBotChatCheckbox = document.getElementById('companion-show-bot-chat');
+    if (showBotChatCheckbox) {
+        showBotChatCheckbox.addEventListener('change', () => {
+            const logPanel = document.getElementById('companion-chat-log');
+            if(logPanel) logPanel.innerHTML = '';
+            renderHistory();
+        });
+    }
+
+    if (!canvas) return;
+
+
+    let live2dModel = null;
+
+    const styleEl = document.createElement("style");
+    styleEl.innerHTML = `
+      @keyframes dangle {
+          0% { transform: scale(var(--vivian-scale, 1)) rotate(-5deg) translateY(0); }
+          100% { transform: scale(var(--vivian-scale, 1)) rotate(5deg) translateY(-10px); }
+      }
+      .dangle-animate {
+          animation: dangle 0.4s infinite alternate ease-in-out;
+      }
+    `;
+    document.head.appendChild(styleEl);
+
+    async function initLive2D() {
+        try {
+            if (typeof PIXI === 'undefined' || !PIXI.live2d) {
+                console.warn('[companion] Live2D 라이브러리 로드 실패');
+                return;
+            }
+
+            const APP_WIDTH = 240;
+            const APP_HEIGHT = 320;
+
+                        const app = new PIXI.Application({
+                view: canvas,
+                backgroundAlpha: 0,
+                width: APP_WIDTH,
+                height: APP_HEIGHT,
+                autoStart: true,
+                preserveDrawingBuffer: true,
+                resolution: window.devicePixelRatio || 1
+            });
+            let model;
+            try {
+                model = await PIXI.live2d.Live2DModel.from(MODEL_URL, { autoUpdate: true, autoInteract: false });
+                app.stage.addChild(model);
+                
+                // Extremely fail-safe scaling for ANY model
+                const scaleX = APP_WIDTH / model.width;
+                const scaleY = APP_HEIGHT / model.height;
+                const fitScale = Math.min(scaleX, scaleY) * 0.95;
+                
+                model.scale.set(fitScale);
+                model.x = (APP_WIDTH - model.width) / 2;
+                model.y = Math.max(APP_HEIGHT - model.height, 0); // Bottom align usually better
+                
+                // Force visibility and let it update
+                model.visible = true;
+                model.alpha = 1;
+                
+                console.log(`Mimi PIXI! w=${model.width} h=${model.height} scale=${fitScale}`);
+                
+                // Force an emotion or idle parameter just to make sure it wakes up
+                try { model.motion("tap_body"); } catch(e) {}
+            } catch (err) {
+                console.error("Live2D Load Error:", err);
+                return;
+            }
+
+            function updateScale(uiScale) {
+                canvas.style.setProperty('--vivian-scale', uiScale);
+                const bubble = document.getElementById('companion-speech-bubble');
+                if (bubble) bubble.style.setProperty('--vivian-scale', uiScale);
+                canvas.style.transform = 'scale(' + uiScale + ')';
+                canvas.style.transformOrigin = 'bottom right';
+            }
+            const scaleSlider = document.getElementById('companion-scale-slider');
+            const scaleVal = document.getElementById('companion-scale-val');
+            let storedScale = localStorage.getItem('companion_scale');
+            if (storedScale) {
+                storedScale = parseFloat(storedScale);
+                if (scaleVal) scaleVal.textContent = storedScale.toFixed(1);
+                updateScale(storedScale);
+                if (scaleSlider) scaleSlider.value = storedScale;
+            } else {
+                updateScale(1.0);
+            }
+            if (scaleSlider) {
+                scaleSlider.addEventListener('input', (e) => {
+                    const val = parseFloat(e.target.value);
+                    if (scaleVal) scaleVal.textContent = val.toFixed(1);
+                    updateScale(val);
+                    localStorage.setItem('companion_scale', val);
+                });
+            }
+
+            const exprBtns = document.getElementById('companion-expr-btns');
+            if (exprBtns) {
+                exprBtns.addEventListener('click', (e) => {
+                    if (e.target.tagName === 'BUTTON') {
+                        const expr = e.target.getAttribute('data-expr');
+                        if (expr) react(expr);
+                    }
+                });
+            }
+            
+            const ghostBtn = document.getElementById('companion-ghost-btn');
+            if (ghostBtn) ghostBtn.addEventListener('click', () => { if(window.toggleCharacterVisibility) window.toggleCharacterVisibility(); });
+
+            live2dModel = model;
+
+            // 캔버스는 사각형 전체가 클릭을 가로채서, 크기를 키우면 투명한 여백이 로그인 버튼 같은
+            // 페이지 요소를 덮어 버린다. 마우스가 캐릭터가 실제로 그려진(불투명한) 픽셀 위에 있을 때만
+            // 캔버스가 클릭을 받고, 나머지는 아래 페이지로 통과시킨다(preserveDrawingBuffer 라 읽을 수 있음).
+            // 터치는 누르기 전에 pointermove 가 없어 판정할 수 없으므로 기존 동작 그대로 둔다.
+            const gl = app.renderer.gl;
+            const pixel = new Uint8Array(4);
+            let pressingCharacter = false;
+            function isOpaqueAt(clientX, clientY) {
+                const rect = canvas.getBoundingClientRect();
+                if (clientX < rect.left || clientX >= rect.right || clientY < rect.top || clientY >= rect.bottom) return false;
+                const px = Math.floor((clientX - rect.left) / rect.width * canvas.width);
+                const py = Math.floor((rect.bottom - clientY) / rect.height * canvas.height); // WebGL 은 아래쪽이 y=0
+                gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+                return pixel[3] > 10;
+            }
+            canvas.addEventListener('pointerdown', () => { pressingCharacter = true; });
+            window.addEventListener('pointerup', () => { pressingCharacter = false; });
+            window.addEventListener('pointermove', (e) => {
+                if (e.pointerType !== 'mouse' || pressingCharacter || canvas.style.opacity === '0') return;
+                canvas.style.pointerEvents = isOpaqueAt(e.clientX, e.clientY) ? 'auto' : 'none';
+            }, { passive: true });
+
+            live2dModel.internalModel.on('beforeModelUpdate', () => {
+                if (window.currentVivianEmotion && live2dModel.internalModel.coreModel) {
+                    live2dModel.internalModel.coreModel.addParameterValueById(window.currentVivianEmotion, 1.0);
+                }
+            });
+
+                                    function makeDraggable(elId, handleId, storageKey) {
+                const el = document.getElementById(elId);
+                const handle = document.getElementById(handleId);
+                if (!el || !handle) return;
+                let isDown = false, startX, startY, startLeft, startTop;
+
+
+
+                handle.addEventListener('pointerdown', (e) => {
+                    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+                    isDown = true;
+                    if (elId === "companion-character-wrap") window.isDraggingVivian = true;
+                    
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    const rect = el.getBoundingClientRect();
+                    startLeft = rect.left;
+                    startTop = rect.top;
+                    el.style.right = 'auto';
+                    el.style.bottom = 'auto';
+                    el.style.left = startLeft + 'px';
+                    el.style.top = startTop + 'px';
+                    handle.style.cursor = 'grabbing';
+                    
+                    if(elId === "companion-character-wrap") {
+                        
+                        handle.style.filter = "drop-shadow(0px 10px 15px rgba(0,0,0,0.4))";
+                        react('shy');
+                    }
+                });
+                
+                window.addEventListener('pointermove', (e) => {
+                    if (!isDown) return;
+                    e.preventDefault();
+                    el.style.left = (startLeft + e.clientX - startX) + 'px';
+                    el.style.top = (startTop + e.clientY - startY) + 'px';
+                }, { passive: false });
+                
+                window.addEventListener('pointerup', () => {
+                    if(el.id === "companion-character-wrap") {
+                        
+                        handle.style.filter = "drop-shadow(0px 4px 6px rgba(0,0,0,0.2))";
+                        react('normal');
+                    }
+
+                    if (isDown) {
+                        isDown = false;
+                        handle.style.cursor = 'grab';
+                        try {
+                            const rect = el.getBoundingClientRect();
+                            const pos = { left: rect.left, top: rect.top };
+                            localStorage.setItem(storageKey, JSON.stringify(pos));
+                        } catch (e) {}
+                    }
+                });
+
+                if (elId === "companion-character-wrap") {
+                    handle.addEventListener('dblclick', (e) => {
+                        react('angry');
+                    });
+                }
+            }
+
+            makeDraggable('companion-character-wrap', 'companion-canvas', 'companion_pos_char');
+            makeDraggable('companion-chat-panel', 'companion-chat-drag-handle', 'companion_pos_chat');
+            
+
+
+
+            const chatOpenBtn = document.getElementById('companion-chat-open');
+            if (chatOpenBtn) {
+                chatOpenBtn.addEventListener('click', () => {
+                    react('greet');
+                    if(panel.style.display === 'none' || !panel.style.display) {
+                        togglePanel();
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('[companion] Live2D 모델 로드 실패:', e);
+        }
+    }
+
+    function analyzeEmotion(text) {
+        if (!text) return 'normal';
+        const k = text;
+        if (/(화나|짜증|흥|불쾌|경멸|싸늘|차갑|인상|노려|찌푸리|흥칫뿡|삐진|분노)/.test(k)) return 'angry';
+        if (/(슬프|훌쩍|당황|당혹|놀라|어머|앗|눈물|울먹|우울|걱정|허둥지둥|으앙)/.test(k)) return 'sad';
+        if (/(부끄|발그레|화끈|수줍|붉히)/.test(k)) return 'shy';
+        if (/(웃|미소|행복|기쁘|즐거|신나|하하|후훗|방긋|환하|활짝)/.test(k)) return 'happy';
+        return 'normal';
+    }
+
+        function react(emotion) {
+        if (!live2dModel) return;
+        const motionByEmotion = { greet: 'tap_body', thinking: 'flick_head', happy: 'tap_body', angry: 'tap_body', sad: 'flick_head', shy: 'tap_body', normal: 'tap_body' };
+        try { live2dModel.motion(motionByEmotion[emotion] || 'tap_body'); } catch (e) { }
+        }
+    initLive2D();
+
+    function loadHistory() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch (e) { return []; }
+    }
+    function saveHistory(history) {
+        const trimmed = history.slice(-MAX_STORED_TURNS);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed)); } catch (e) { }
+    }
+
+    let history = loadHistory();
+
+    function renderHistory() {
+        log.innerHTML = '';
+        if (history.length === 0) {
+            appendBubble('bot', '멍멍! 여행자님, 타미랑 여행 가자 멍! 뼈다귀는 챙겼냐 멍?! 🐾');
+            return;
+        }
+        history.forEach(turn => appendBubble(turn.role === 'user' ? 'user' : 'bot', turn.content));
+    }
+
+        function appendBubble(who, text) {
+        if (who === 'bot') {
+            const popup = document.getElementById('companion-speech-bubble');
+            if (popup) {
+                popup.innerText = text;
+                popup.style.display = 'block';
+                if (window.companionSpeechTimeout) clearTimeout(window.companionSpeechTimeout);
+                window.companionSpeechTimeout = setTimeout(() => {
+                    popup.style.display = 'none';
+                }, 12000);
+            }
+            const showCheck = document.getElementById('companion-show-bot-chat');
+            if (showCheck && !showCheck.checked) {
+                return;
+            }
+        }
+
+        const div = document.createElement('div');
+        div.className = 'companion-msg ' + who;
+
+        div.style.padding = '8px 12px';
+        div.style.borderRadius = '12px';
+        div.style.maxWidth = '80%';
+        div.style.wordBreak = 'break-word';
+        div.style.marginBottom = '6px';
+        div.style.fontSize = '14px';
+
+        if (who === 'user') {
+            div.style.alignSelf = 'flex-end';
+            div.style.background = '#4A6741';
+            div.style.color = 'white';
+        } else {
+            div.style.alignSelf = 'flex-start';
+            div.style.background = 'white';
+            div.style.color = '#333';
+            div.style.border = '1px solid #ddd';
+        }
+
+        div.textContent = text;
+        log.appendChild(div);
+        log.scrollTop = log.scrollHeight;
+    }
+
+    window.companionAddBotMessage = function (text) {
+        if (!text) return;
+        appendBubble('bot', text);
+        history.push({ role: 'assistant', content: text });
+        saveHistory(history);
+    };
+
+    function togglePanel() {
+        const opening = panel.style.display === 'none' || !panel.style.display;
+        panel.style.display = opening ? 'flex' : 'none';
+        
+        // We no longer force scale to 0.8 when opening. Just apply the saved scale.
+        const sc = parseFloat(localStorage.getItem('companion_scale') || 1.0);
+        canvas.style.setProperty('--vivian-scale', sc);
+        const bubble = document.getElementById('companion-speech-bubble');
+        if (bubble) bubble.style.setProperty('--vivian-scale', sc);
+        canvas.style.transform = 'scale(' + sc + ')';
+        
+        if (opening) {
+            renderHistory();
+            input.focus();
+        }
+    }
+        window.toggleCharacterVisibility = function(forceHide) {
+        const isCurrentlyHidden = canvas.style.opacity === '0';
+        const willHide = forceHide !== undefined ? forceHide : !isCurrentlyHidden;
+        
+        canvas.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        canvas.style.opacity = willHide ? '0' : '1';
+        canvas.style.pointerEvents = willHide ? 'none' : 'auto';
+        
+        if (toggleBtn) {
+            toggleBtn.textContent = willHide ? '🙈' : '👀';
+            toggleBtn.title = willHide ? '캐릭터 보이기' : '캐릭터 숨기기';
+        }
+        const ghostBtn = document.getElementById('companion-ghost-btn');
+        if (ghostBtn) {
+            ghostBtn.innerHTML = willHide ? '👻 표시하기' : '👻 숨기기';
+            ghostBtn.style.background = willHide ? '#a5d6a7' : '#ffeb3b';
+        }
+        
+        localStorage.setItem('companion_hidden_state', willHide ? 'true' : 'false');
+    };
+    
+    
+    // FORCE VISIBLE
+    localStorage.removeItem('companion_hidden_state');
+    window.toggleCharacterVisibility(false);
+
+    toggleBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.toggleCharacterVisibility();
+    });
+    closeBtn?.addEventListener('click', () => { panel.style.display = 'none'; });
+
+    const clearBtn = document.getElementById('companion-chat-clear');
+    clearBtn?.addEventListener('click', () => {
+        if (confirm('모든 대화 기록을 초기화하시겠습니까?')) {
+            history = [];
+            localStorage.removeItem(STORAGE_KEY);
+            log.innerHTML = '';
+            // 초기 인사말 다시 추가
+            setTimeout(() => {
+                const initMsg = document.createElement('div');
+                initMsg.style.alignSelf = 'flex-start';
+                initMsg.style.background = 'white';
+                initMsg.style.color = 'black';
+                initMsg.style.padding = '8px 12px';
+                initMsg.style.borderRadius = '12px';
+                initMsg.style.maxWidth = '80%';
+                initMsg.style.lineHeight = '1.4';
+                initMsg.style.wordBreak = 'break-word';
+                initMsg.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+                initMsg.innerHTML = '📝 **새로운 시작이네요!** 다시 안내해 드릴까요?';
+                log.appendChild(initMsg);
+            }, 300);
+        }
+    });
+
+    async function sendMessage() {
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
+        input.disabled = true;
+        sendBtn.disabled = true;
+        react('thinking');
+
+        appendBubble('user', text);
+        history.push({ role: 'user', content: text });
+
+        let csrfToken = document.querySelector('meta[name="_csrf"]')?.content || '';
+        let csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content || 'X-CSRF-TOKEN';
+
+        try {
+            const res = await fetch('/api/companion/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(csrfToken ? {[csrfHeader]: csrfToken} : {})
+                },
+                body: JSON.stringify({
+                    history: history.slice(0, -1),
+                    message: text
+                })
+            });
+            const result = await res.json();
+
+            const reply = result.success ? result.data : (result.message || '어라, 응답을 못 받았어 🥺');
+            appendBubble('bot', reply);
+            history.push({ role: 'assistant', content: reply });
+            saveHistory(history);
+            const detectedEmotion = analyzeEmotion(reply);
+            react(detectedEmotion);
+        } catch (e) {
+            appendBubble('bot', '멍멍! 여행자님, 타미랑 여행 가자 멍! 뼈다귀는 챙겼냐 멍?! 🐾');
+        } finally {
+            input.disabled = false;
+            sendBtn.disabled = false;
+            input.focus();
+        }
+    }
+
+    sendBtn?.addEventListener('click', sendMessage);
+    input?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+})();

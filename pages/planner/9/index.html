@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    
+    <title>Tanoshimi - 여행 계획표 - Tanoshimi</title>
+    
+    <link rel="icon" type="image/svg+xml" href="/tanoshimi/assets/favicon.svg">
+
+    <link rel="stylesheet" href="/tanoshimi/css/app.css">
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard-dynamic-subset.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&family=Fraunces:opsz,wght,SOFT@9..144,500..700,100&display=swap" rel="stylesheet">
+
+    <!-- CSP 통신(인라인 스크립트 대응)을 위한 함수 구조 -->
+    <script>
+        window.api = {
+            async get(url) {
+                try {
+                    const r = await fetch(url);
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async post(url, data) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = { 'Content-Type': 'application/json' };
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+
+                try {
+                    const r = await fetch(url, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(data)
+                    });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async patch(url, data={}) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = { 'Content-Type': 'application/json' };
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+                try {
+                    const r = await fetch(url, { method: 'PATCH', headers: headers, body: JSON.stringify(data) });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async del(url) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = {};
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+                try {
+                    const r = await fetch(url, { method: 'DELETE', headers: headers });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            }
+        };
+    </script>
+    <script src="/tanoshimi/js/report.js" defer></script>
+    <!-- 실시간 알림용 웹소켓 라이브러리 - 외부 CDN 대신 저장소에 둔 사본(static/vendor, CDN 과 같은
+         sockjs-client 1.6.1 / stomp.js 2.3.3)을 쓴다. CDN 이 오염되면 변조된 스크립트가 모든 화면에서
+         실행될 수 있어서(CodeQL js/functionality-from-untrusted-source). -->
+    <script src="/tanoshimi/vendor/sockjs.min.js"></script>
+    <script src="/tanoshimi/vendor/stomp.min.js"></script>
+    <script src="/tanoshimi/js/notifications.js" defer></script>
+<script>window.__STATIC_DEMO__=true;</script></head>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse at top left, rgba(255,255,255,.35), transparent 55%),
+      var(--parchment);
+    color:var(--ink);
+    font-family:'Gowun Dodum','Apple SD Gothic Neo',sans-serif;
+    line-height:1.55;
+  }
+  h1,h2,h3,.disp{ font-family:var(--font-display),'Gowun Dodum',sans-serif; color:var(--forest-deep); margin:0; }
+  .wrap{ max-width:1280px; margin:0 auto; padding:26px 22px 80px; }
+
+  /* ---------- 상단 ---------- */
+  .page-head{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:6px; }
+  .page-head h1{ font-size:30px; }
+  .page-head .sub{ color:var(--ink-soft); font-size:13.5px; margin:4px 0 0; }
+  .stamp{
+    font-family:var(--font-display); font-size:12px; letter-spacing:1px; color:var(--sash-deep);
+    border:2px dashed var(--sash); border-radius:999px; padding:6px 16px;
+    transform:rotate(-2deg); background:rgba(255,255,255,.5); white-space:nowrap;
+  }
+
+  .trail{ display:flex; align-items:center; gap:8px; margin:18px 0 18px; color:var(--rope); }
+  .trail .dot{ width:7px; height:7px; border-radius:50%; background:var(--rope); flex:none; }
+  .trail .ln{ flex:1; border-top:2px dashed var(--rope); }
+
+  /* ---------- 공통 atoms ---------- */
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; }
+  .btn{
+    font-family:'Gowun Dodum',sans-serif; font-weight:700; font-size:13px; border:none; border-radius:10px;
+    padding:9px 15px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; color:var(--ink);
+  }
+  .btn:focus-visible{ outline:3px solid var(--gold); outline-offset:2px; }
+  .btn-primary{ background:var(--sash); color:#fff; box-shadow:0 3px 0 var(--sash-deep); }
+  .btn-primary:active{ transform:translateY(2px); box-shadow:0 1px 0 var(--sash-deep); }
+  .btn-forest{ background:var(--forest); color:#fff; box-shadow:0 3px 0 var(--forest-deep); }
+  .btn-forest:active{ transform:translateY(2px); box-shadow:0 1px 0 var(--forest-deep); }
+  .btn-ghost{ background:var(--card); color:var(--forest-deep); border:2px solid var(--line); }
+  .btn-ghost:hover{ border-color:var(--sash); color:var(--sash-deep); }
+  .btn-sm{ font-size:12px; padding:6px 11px; border-radius:8px; }
+  .chip{ font-size:11.5px; font-weight:700; border-radius:999px; padding:4px 11px; display:inline-block; }
+  .chip-region{ background:var(--sky); color:#0f2247; }
+  .chip-soft{ background:var(--parchment-deep); color:var(--ink-soft); }
+
+  /* ---------- 레이아웃 ---------- */
+  .planner{ display:grid; grid-template-columns:1fr 348px; gap:20px; align-items:start; }
+
+  /* ---------- 계획표 ---------- */
+  .board{ overflow:hidden; }
+  .board-top{
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    padding:14px 18px; border-bottom:1px solid var(--line); background:var(--parchment-deep);
+  }
+  .board-top .ttl{ font-family:var(--font-display); font-size:16px; color:var(--forest-deep); display:flex; align-items:center; gap:8px; }
+  .board-tools{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+  .legend{ display:flex; gap:12px; flex-wrap:wrap; padding:10px 18px; font-size:11.5px; color:var(--ink-soft); border-bottom:1px solid var(--line); }
+  .legend .sw{ width:10px; height:10px; border-radius:3px; display:inline-block; margin-right:5px; vertical-align:-1px; }
+
+  .grid-head{ display:grid; grid-template-columns:56px repeat(4,1fr); border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; z-index:10; }
+  .grid-head .corner{ border-right:1px solid var(--line); position: sticky; left: 0; z-index: 11; background: var(--card); }
+  .day-head{ padding:9px 8px; text-align:center; border-right:1px solid var(--line); }
+  .day-head:last-child{ border-right:none; }
+  .day-head .d{ font-family:var(--font-display); font-size:15px; color:var(--forest-deep); }
+  .day-head .w{ font-size:11px; color:var(--ink-soft); }
+  .day-head .add{
+    margin-top:4px; font-size:11px; color:var(--ink-soft); background:var(--parchment);
+    border:1px dashed var(--rope); border-radius:7px; padding:2px 8px; cursor:pointer; font-family:inherit;
+  }
+  .day-head .add:hover{ border-color:var(--sash); color:var(--sash-deep); }
+  .day-head .opt-route{
+    display:block; margin:4px auto 0; font-size:11px; color:var(--forest-deep); background:var(--card);
+    border:1px solid var(--line); border-radius:7px; padding:2px 8px; cursor:pointer; font-family:inherit;
+  }
+  .day-head .opt-route:hover{ border-color:var(--sash); color:var(--sash-deep); }
+  .day-head .opt-route:disabled{ opacity:.5; cursor:default; }
+
+  .grid-body{ display:grid; grid-template-columns:56px repeat(4,1fr); }
+  
+  .time-col { border-right:2px solid var(--line); background:var(--parchment-deep); padding-top:1px; z-index:5; position:sticky; left:0; box-shadow: 2px 0 5px rgba(0,0,0,0.03); }
+  .slot {
+    height:var(--slot-h); font-size:10px; color:var(--forest-deep); display:flex; align-items:center; justify-content:flex-end;
+    padding:0 6px 0 0; border-bottom:1px dashed rgba(216, 198, 154, 0.5); opacity:0.7;
+  }
+  .slot:nth-child(even) { border-bottom:1px solid var(--line); opacity:1; font-weight:600; font-size:11.5px; }
+  
+  .col{
+    position:relative; border-right:1px solid var(--line);
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0, transparent calc(var(--slot-h)*2 - 1px),
+        var(--line) calc(var(--slot-h)*2 - 1px), var(--line) calc(var(--slot-h)*2)
+      ),
+      repeating-linear-gradient(
+        to bottom,
+        transparent 0, transparent calc(var(--slot-h) - 1px),
+        #efe3c6 calc(var(--slot-h) - 1px), #efe3c6 var(--slot-h)
+      );
+  }
+  .col:last-child{ border-right:none; }
+  .col.over{ background-color:rgba(224,121,63,.05); }
+
+  /* 일정 블록 */
+  .block{
+    position:absolute; left:4px; right:4px; border-radius:9px; padding:4px 7px;
+    color:#fff; overflow:hidden; cursor:grab; user-select:none;
+    box-shadow:0 2px 5px rgba(59,44,20,.2);
+    border:1px solid rgba(0,0,0,.08);
+    font-size:11.5px; line-height:1.35;
+  }
+  .block:active{ cursor:grabbing; }
+  .block.dragging{ opacity:.4; }
+  .block .t{ font-weight:700; font-size:12px; display:block; word-break:keep-all; }
+  .block .m{ opacity:.9; font-size:10.5px; }
+  .block .x{
+    position:absolute; top:2px; right:3px; width:17px; height:17px; border-radius:50%;
+    background:rgba(0,0,0,.18); color:#fff; border:none; cursor:pointer; font-size:11px; line-height:1;
+    display:none; align-items:center; justify-content:center; padding:0;
+  }
+  .block:hover .x{ display:flex; }
+  .block .grip{
+    position:absolute; left:0; right:0; bottom:0; height:9px; cursor:ns-resize;
+  }
+  .block .grip::after{
+    content:""; position:absolute; left:50%; bottom:3px; transform:translateX(-50%);
+    width:22px; height:2px; border-radius:2px; background:rgba(255,255,255,.65);
+  }
+  .block.blank{
+    background: var(--custom-slot-color, #c8a94b);
+    color:var(--ink-soft); box-shadow:none;
+  }
+  .block.blank .t{ color:var(--custom-text-color, var(--ink)); }
+  .block.blank .grip::after{ background:var(--rope); }
+  
+  .block.pkg{ background:var(--forest); }
+  .block.act{ background:var(--sash); }
+  .block .t[contenteditable="true"]{ outline:2px solid var(--gold); border-radius:4px; padding:0 2px; cursor:text; }
+  .block.shake{ animation:shake .3s; }
+  @keyframes shake{ 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+
+  .drop-ghost{
+    position:absolute; left:4px; right:4px; border-radius:9px; pointer-events:none;
+    border:2px dashed var(--sash); background:rgba(224,121,63,.12); display:none; z-index:5;
+  }
+  .now-line{ position:absolute; left:0; right:0; height:2px; background:var(--sash); opacity:.5; pointer-events:none; }
+  .now-line::before{ content:""; position:absolute; left:-1px; top:-3px; width:8px; height:8px; border-radius:50%; background:var(--sash); }
+
+  .board-foot{
+    display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:11px 18px; border-top:1px solid var(--line); background:var(--parchment-deep);
+    font-size:12px; color:var(--ink-soft);
+  }
+
+  /* ---------- AI 패널 ---------- */
+  .ai{ display:flex; flex-direction:column; height:calc(100vh - 220px); min-height:520px; position:sticky; top:70px; overflow:hidden; }
+  .ai-head{ padding:13px 16px; border-bottom:1px solid var(--line); background:var(--forest); color:#fff; display:flex; align-items:center; gap:9px; }
+  .ai-head .nm{ font-family:var(--font-display); font-size:15px; }
+  .ai-head .st{ font-size:11px; opacity:.85; }
+  .ai-body{ flex:1; overflow:auto; padding:14px; background:var(--parchment); display:flex; flex-direction:column; gap:10px; }
+  .msg{ max-width:88%; padding:9px 13px; border-radius:14px; font-size:13px; white-space:pre-wrap; word-break:break-word; }
+  .msg .who{ display:block; font-size:10.5px; font-weight:700; color:var(--ink-soft); margin-bottom:2px; }
+  .msg.me .who{ color:rgba(255,255,255,.75); }
+  .msg .tr{ font-size:10px; margin-left:6px; padding:1px 5px; border:1px solid var(--line); background:var(--parchment); color:var(--ink); border-radius:6px; cursor:pointer; }
+  .chat-tabs{ display:flex; background:var(--forest); }
+  .chat-tabs button{ flex:1; padding:11px 0; border:none; background:none; color:rgba(255,255,255,.65); font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; border-bottom:3px solid transparent; }
+  .chat-tabs button.on{ color:#fff; border-bottom-color:var(--gold); }
+  .chat-tabs .badge{ display:inline-block; min-width:16px; margin-left:4px; padding:0 4px; border-radius:999px; background:var(--sash); color:#fff; font-size:10px; }
+  .chat-tabs .badge[hidden]{ display:none; }
+  .tab-pane{ flex:1; min-height:0; display:flex; flex-direction:column; }
+  .tab-pane[hidden]{ display:none; }
+  .msg.bot{ background:var(--card); align-self:flex-start; border-bottom-left-radius:4px; border:1px solid var(--line); }
+  .msg.me{ background:var(--forest); color:#fff; align-self:flex-end; border-bottom-right-radius:4px; }
+  .msg.sys{ align-self:center; background:none; color:var(--ink-soft); font-size:11px; text-align:center; }
+  .typing span{ display:inline-block; width:5px; height:5px; margin-right:3px; border-radius:50%; background:var(--rope); animation:blink 1s infinite; }
+  .typing span:nth-child(2){ animation-delay:.2s } .typing span:nth-child(3){ animation-delay:.4s }
+  @keyframes blink{ 0%,60%,100%{opacity:.25} 30%{opacity:1} }
+
+  .rec-list{ align-self:stretch; display:flex; flex-direction:column; gap:8px; }
+  .rec-card{
+    display:flex; gap:9px; align-items:center; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:8px; cursor:grab;
+  }
+  .rec-card:active{ cursor:grabbing; }
+  .rec-card.dragging{ opacity:.45; }
+  .rec-card .sw{ width:6px; align-self:stretch; border-radius:3px; flex:none; }
+  .rec-card .info{ flex:1; min-width:0; }
+  .rec-card .t{ font-size:12.5px; font-weight:700; display:block; }
+  .rec-card .m{ font-size:11px; color:var(--ink-soft); }
+  .rec-card .tags{ margin-top:3px; display:flex; gap:4px; flex-wrap:wrap; }
+  .rec-card .tag{ font-size:10px; background:var(--parchment-deep); color:var(--ink-soft); border-radius:999px; padding:1px 7px; }
+  .rec-card .put{
+    flex:none; width:26px; height:26px; border-radius:8px; border:1px solid var(--line);
+    background:var(--parchment); color:var(--forest-deep); font-size:15px; cursor:pointer; line-height:1;
+  }
+  .rec-card .put:hover{ background:var(--sash); color:#fff; border-color:var(--sash); }
+  .rec-hint{ font-size:10.5px; color:var(--ink-soft); text-align:center; }
+
+  .quick{ display:flex; gap:6px; flex-wrap:wrap; padding:9px 12px 0; }
+  .quick button{
+    font-family:inherit; font-size:11.5px; color:var(--forest-deep); background:var(--card);
+    border:2px solid var(--line); border-radius:999px; padding:5px 11px; cursor:pointer;
+  }
+  .quick button:hover{ border-color:var(--sash); color:var(--sash-deep); }
+
+  .ai-input{ display:flex; gap:7px; padding:11px 12px 12px; border-top:1px solid var(--line); background:var(--card); }
+  .ai-input input{
+    flex:1; border:2px solid var(--forest); border-radius:999px; padding:9px 15px;
+    font-family:inherit; font-size:13px; background:var(--card); color:var(--ink); outline:none;
+  }
+  .ai-input input:focus{ border-color:var(--sash); }
+  .ai-send{ width:40px; height:40px; border-radius:50%; background:var(--forest); color:#fff; border:none; cursor:pointer; font-size:15px; flex:none; }
+  .ai-send:hover{ background:var(--forest-deep); }
+
+  .toast{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px);
+    background:var(--forest-deep); color:#fff; font-size:13px; padding:10px 18px; border-radius:999px;
+    box-shadow:0 6px 16px rgba(59,44,20,.3); opacity:0; pointer-events:none; transition:.25s; z-index:50;
+  }
+  .toast.on{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  footer.note{ text-align:center; color:var(--ink-soft); font-size:12px; margin-top:34px; }
+
+  @media (max-width:900px){
+    .planner{ grid-template-columns:1fr; }
+    .ai{ height:520px; position:static; }
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+  /* 편집권 표시: 있는 사람은 추가 버튼이 컬러, 없는 사람은 흑백 + 금지 커서 */
+  .can-edit .day-head .add{ background:var(--sash); color:#fff; border:1px solid var(--sash); font-weight:700; }
+  .can-edit .day-head .add:hover{ background:var(--sash-deep); border-color:var(--sash-deep); color:#fff; }
+  .can-edit .rec-card .put{ background:var(--sash); color:#fff; border-color:var(--sash); }
+
+  .edit-locked .day-head .add,
+  .edit-locked .day-head .opt-route,
+  .edit-locked .rec-card .put,
+  .edit-locked #btn-add,
+  .edit-locked #btn-clear{ filter:grayscale(1); opacity:.45; cursor:not-allowed; }
+  .edit-locked .day-head .add:hover{ border-color:var(--rope); color:var(--ink-soft); }
+  .edit-locked .day-head .opt-route:hover{ border-color:var(--line); color:var(--forest-deep); }
+  .edit-locked .rec-card .put:hover{ background:var(--parchment); color:var(--forest-deep); border-color:var(--line); }
+  .edit-locked .rec-card{ cursor:default; }
+</style>
+</head>
+<div style="background:#1f2937;color:#fff;font:13px/1.4 sans-serif;padding:6px 12px;text-align:center">정적 데모 화면입니다. 로그인·저장·채팅 등 서버 기능은 동작하지 않습니다.</div>
+<header class="site-header">
+    <div class="hdr">
+
+        <!-- 왼쪽 : 로고 + 주요 메뉴 -->
+        <div class="hdr-left">
+            <a href="/tanoshimi/" class="brand">
+                <span class="brand-mark" aria-hidden="true">楽</span>
+                <span class="brand-word">Tanoshimi</span>
+            </a>
+            <nav class="gnb-main hide-mobile">
+                <a href="/tanoshimi/recommendations">관광지 둘러보기</a>
+                <a href="/tanoshimi/party-board">파티 찾기</a>
+                <a href="/tanoshimi/board">여행 스냅</a>
+                <a href="/tanoshimi/my-parties">내 파티</a>
+            </nav>
+        </div>
+
+        <!-- 오른쪽 : 언어 / 계정 / 알림 / 메뉴 -->
+        <div class="hdr-right">
+
+            <div class="lang-seg hide-mobile">
+                <a href="?lang=ko" class="on">KO</a>
+                <a href="?lang=ja">JP</a>
+            </div>
+
+            
+
+            
+                <!-- 프로필 + 드롭다운 -->
+                <div id="profile-menu-wrap" style="position:relative;">
+                    <div class="profile-btn" id="profile-btn">
+                        
+                        <div class="avatar-txt">유</div>
+                        <span class="profile-name hide-mobile">유자차</span>
+                    </div>
+
+                    <div class="menu-pop" id="profile-dropdown" style="display:none;">
+                        
+                        <a href="/tanoshimi/mypage">마이페이지</a>
+                        <a href="/tanoshimi/mypage/account">계정 관리</a>
+                        <form action="/tanoshimi/logout" method="post">
+                            <button type="submit" class="danger">로그아웃</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 알림 -->
+                <div class="notif-wrap">
+                    <span class="notif-bell" id="top-notif-bell" role="button" aria-label="알림">
+                        🔔
+                        <span class="notif-badge" id="top-notif-badge">0</span>
+                    </span>
+                    <div class="notif-dropdown" id="top-notif-dropdown" style="display:none;">
+                        <div class="notif-dropdown-title">신규 알림</div>
+                        <div class="notif-list" id="top-notif-list">
+                            <p class="notif-empty">새로운 알림이 없습니다.</p>
+                        </div>
+                    </div>
+                </div>
+            
+
+            <button id="sidebar-toggle-btn" class="menu-btn" aria-label="전체 메뉴">☰</button>
+        </div>
+    </div>
+
+    <!-- 임시 비밀번호로 로그인한 경우 강제 비밀번호 변경 모달 (비밀번호 재발급 워크플로우).
+         닫기/취소 버튼이 없다 - 바꾸기 전까지는 어떤 페이지를 가든 다시 뜬다. -->
+    
+     
+    
+
+    <!-- 우측 슬라이드 메뉴 (id 는 아래 스크립트가 잡습니다) -->
+    <div id="right-sidebar" class="side-panel">
+        <div class="side-panel-head">
+            <h2>MENU</h2>
+            <button id="sidebar-close-btn" aria-label="닫기">✕</button>
+        </div>
+        <ul class="side-nav">
+            
+            <li><a href="/tanoshimi/recommendations">⛩️ 관광지 둘러보기</a></li>
+            <li><a href="/tanoshimi/party-board">👫 파티 찾기</a></li>
+            <li><a href="/tanoshimi/board">📸 여행 스냅</a></li>
+            <li><a href="/tanoshimi/my-parties">🧳 내 파티</a></li>
+            <li><a href="/tanoshimi/messages">💬 개인 메시지함</a></li>
+            <li><a href="/tanoshimi/planner">🗾 여행 플래너</a></li>
+        </ul>
+    </div>
+
+    <script>
+        document.getElementById('profile-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = document.getElementById('profile-dropdown');
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        document.getElementById('top-notif-bell')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = document.getElementById('top-notif-dropdown');
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        const sidebar = document.getElementById('right-sidebar');
+        document.getElementById('sidebar-toggle-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.style.right = '0';
+            document.body.classList.add('sidebar-open');
+        });
+        document.getElementById('sidebar-close-btn')?.addEventListener('click', () => {
+            sidebar.style.right = '-320px';
+            document.body.classList.remove('sidebar-open');
+        });
+
+        document.addEventListener('click', (e) => {
+            const dp1 = document.getElementById('profile-dropdown');
+            if(dp1 && !dp1.contains(e.target)) dp1.style.display = 'none';
+
+            const dp2 = document.getElementById('top-notif-dropdown');
+            if(dp2 && !dp2.contains(e.target)) dp2.style.display = 'none';
+
+            if (sidebar && sidebar.style.right === '0px' && !sidebar.contains(e.target)) {
+                sidebar.style.right = '-320px';
+                document.body.classList.remove('sidebar-open');
+            }
+        });
+    </script>
+</header>
+
+<div class="wrap">
+
+  <div class="page-head">
+    <div>
+      <h1>여행 계획표</h1>
+      <p class="sub">AI에게 원하는 여행을 말하고 추천 카드를 계획표에 끌어다 놓으세요. 빈칸을 직접 채워도 됩니다.</p>
+    </div>
+    <span class="stamp">오사카 신년 하츠모데 3박4일</span>
+  </div>
+
+  <!-- 현재 편집권 안내 - 전원에게 보임 -->
+  <div id="lock-banner" style="display:flex; align-items:center; gap:8px; padding:10px 16px; margin-bottom:12px;
+       border-radius:10px; background:#fff8ea; border:1px solid var(--gold); font-size:13px;">
+    <span>🔒 지금 편집 가능한 사람: <b id="lock-holder-name">유자차</b></span>
+    <span id="lock-holder-me-badge" style="background:var(--forest); color:#fff; font-size:11px; padding:2px 8px; border-radius:999px;">나</span>
+    
+  </div>
+
+  <!-- ================= 방장 전용 메뉴 ================= -->
+  <div class="card" id="owner-menu" style="padding:16px 18px; margin-bottom:16px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" id="owner-menu-toggle">
+      <h3 style="margin:0; font-size:15px; color:var(--forest);">👑 방장 메뉴</h3>
+      <span id="owner-menu-arrow" style="font-size:12px; color:var(--ink-soft);">펼치기 ▾</span>
+    </div>
+
+    <div id="owner-menu-body" style="display:none; margin-top:14px;">
+      <!-- 편집권 부여/회수 -->
+      <div style="margin-bottom:16px;">
+        <h4 style="margin:0 0 8px; font-size:13px;">편집권 관리</h4>
+        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">기본적으로 방장만 편집할 수 있어요. 파티원 한 명에게 실시간으로 넘겼다가 다시 가져올 수 있습니다.</p>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+          <select id="lock-target-select" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px;">
+            <option value="">편집권을 줄 파티원 선택</option>
+            
+          </select>
+          <button type="button" id="btn-grant-lock" class="btn btn-primary btn-sm">편집권 주기</button>
+          <button type="button" id="btn-revoke-lock" class="btn btn-ghost btn-sm">회수해서 내가 갖기</button>
+        </div>
+      </div>
+
+      <!-- 자동저장 타임라인 (10분 주기) -->
+      <div>
+        <h4 style="margin:0 0 8px; font-size:13px;">저장 시점 타임라인</h4>
+        <p style="font-size:12px; color:var(--ink-soft); margin:0 0 8px;">
+          이상한 수정이 생겼을 때를 대비해 10분마다 자동 저장돼요. 원하는 시점을 골라 그때로 되돌릴 수 있습니다.
+          
+        </p>
+        <button type="button" id="btn-manual-save" class="btn btn-ghost btn-sm" style="margin-bottom:8px;">지금 바로 저장</button>
+        <div id="snapshot-list" style="max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:8px;">
+          <div style="padding:12px; font-size:12px; color:var(--ink-soft);">불러오는 중...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="trail"><span class="dot"></span><span class="ln"></span><span class="dot"></span><span class="ln"></span><span class="dot"></span></div>
+
+  <div class="planner">
+
+    <!-- ================= 계획표 ================= -->
+    <section class="board card">
+      <div class="board-top">
+        
+        <!-- 파티의 지역·출발일·일수를 보여준다. 예전엔 패키지(tour)가 있을 때만 채워져서, 패키지 없이
+             만든 파티는 늘 "지역일정 · 일정 미정"으로 나왔다. -->
+        <div class="ttl" style="display:flex; align-items:center;">
+          <span>📍 오사카</span>
+          <span>·</span>
+          <span>8월 10일 출발</span>
+          <span>· 3박 4일</span>
+          
+        </div>
+
+        <div class="board-tools">
+          <select id="transit-mode" style="padding:6px 8px; border:1px solid var(--line); border-radius:6px; font-size:12.5px;">
+            <option value="public">대중교통</option>
+            <option value="car">자동차</option>
+          </select>
+          <input type="color" id="custom-slot-color" title="배경 색상 커스텀" value="#c8a94b" style="width:30px; height:30px; padding:0; border:none; cursor:pointer;" />
+          <input type="color" id="custom-text-color" title="기존 계획표 글자색상" value="#1b4a9c" style="width:30px; height:30px; padding:0; border:none; cursor:pointer; margin-right:8px;" />
+          <button type="button" id="btn-ai-validate" class="btn btn-ghost btn-sm">일정 AI 검증 브리핑</button>
+          <div style="font-weight:700; font-size:16px; color:var(--sash); display:inline-flex; align-items:center; margin-right:6px;">
+            Total: <span id="total-price" style="letter-spacing:-0.5px; margin-left:4px;">0</span> ¥
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-add-day">+ 일수</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-remove-day">- 일수</button>
+          <button class="btn btn-primary btn-sm" id="btn-add">빈 일정 추가</button>
+          <button class="btn btn-ghost btn-sm" id="btn-clear">전체 비우기</button>
+          <!-- 파티방 "일정 픽스 투표" 결과 - 제출(확정) 전에 파티원 의견을 보고 결정하도록 같이 보여준다.
+               투표는 의견 모으기용이라 결과가 제출을 막지는 않는다(향후 계획). -->
+          <a id="vote-tally-chip"
+             href="/tanoshimi/party-board/12/room"
+             title="파티방에서 투표하기"
+             style="font-size:12.5px; font-weight:700; color:var(--forest-deep); background:var(--parchment); border:1px solid var(--line); border-radius:999px; padding:5px 11px; text-decoration:none; white-space:nowrap;">
+            ⛳ <span>투표</span> 👍 <span>0</span> · 👎 <span>0</span>
+          </a>
+          <button type="button" id="btn-submit" class="btn btn-primary btn-sm" data-schedule-id="9">계획표 제출하기</button>
+          
+          
+        </div>
+      </div>
+
+      <div class="legend" id="legend"></div>
+
+      <!-- 상단 스크롤바 -->
+      <div id="top-scroll-wrapper" style="overflow-x: auto; overflow-y: hidden; margin-bottom: 2px;">
+        <div id="top-scroll-dummy" style="height: 1px;"></div>
+      </div>
+      <div class="grid-wrapper" id="main-scroll-wrapper" style="overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 250px); min-height: 400px;">
+        <div style="min-width: max-content;">
+          <div class="grid-head" id="grid-head"></div>
+          <div class="grid-body" id="grid-body" style="position:relative;"></div>
+        </div>
+      </div>
+
+      <div class="board-foot">
+        <span id="summary">아직 채워진 일정이 없습니다.</span>
+        <span>블록 아래 손잡이를 잡고 늘리면 시간이 늘어납니다 · 항목을 눌러 내용을 바꿀수있습니다</span>
+      </div>
+    </section>
+
+    <!-- ================= AI 패널 ================= -->
+    <aside class="ai card">
+      <div class="chat-tabs" role="tablist">
+        <button type="button" role="tab" data-tab="tami" class="on">🐶 타미</button>
+        <button type="button" role="tab" data-tab="team">👥 팀 채팅<span class="badge" id="team-badge" hidden>0</span></button>
+      </div>
+
+      <div class="tab-pane" data-pane="tami">
+      <div class="ai-head">
+        <svg width="22" height="22" viewBox="0 0 54 54" aria-hidden="true">
+          <circle cx="27" cy="27" r="20" fill="none" stroke="#fff" stroke-width="3"/>
+          <polygon points="27,12 31,27 27,42 23,27" fill="var(--gold)"/>
+        </svg>
+        <div>
+          <div class="nm">타미 (AI 강아지)</div>
+          <div class="st">여행자님! 타미랑 뼈다귀 찾으러 가자 멍!</div>
+        </div>
+      </div>
+
+      <div class="ai-body" id="chat">
+        <div class="msg bot">멍멍! 반갑다 멍! 타미랑 어디로 산책 갈지(여행 갈지) 알려주면 타미가 냄새 킁킁 맡아서 다 찾아주겠다 멍!! 🐾</div>
+        <div class="msg sys">추천 카드를 왼쪽 계획표로 끌어다 일정을 만듭니다!</div>
+      </div>
+
+      <div class="quick" id="quick"></div>
+
+      <div class="ai-input">
+        <label for="ai-text" class="visually-hidden" style="position:absolute;left:-9999px;">AI에게 보낼 내용</label>
+        <input id="ai-text" type="text" placeholder="우리 인생사진 건지기 좋은 곳 원해!" autocomplete="off">
+        <button class="ai-send" id="ai-send" aria-label="보내기">></button>
+      </div>
+      </div>
+
+      <!-- 팀 채팅 - 파티 방(/party-board/{id}/room)과 같은 채팅방 -->
+      <div class="tab-pane" data-pane="team" hidden>
+        <div class="ai-body" id="team-chat">
+          <div class="msg sys">오픈된 채팅방이 없습니다.</div>
+        </div>
+        
+      </div>
+    </aside>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/*<![CDATA[*/
+const SCHEDULE_ID = 9;
+const TOUR_REGION = "\uC624\uC0AC\uCE74";
+const DURATION_NIGHTS = 3;
+const SCHEDULE_DAYS = 4;
+const SCHEDULE_STATUS = "draft";
+const TRIP_START_DATE = "2026-08-10";
+const IS_PARTY_OWNER = true;
+const IS_LOCK_HOLDER = true;
+const ROOM_ID = null;
+const MY_NAME = "\uC720\uC790\uCC28";
+const UI_LANG = "ko";
+const INITIAL_CHAT_HISTORY = "[]";
+/*]]>*/
+</script>
+
+<script>
+(function () {
+    // [1] 타미 / 팀 채팅 탭
+    const tabs = document.querySelectorAll('.chat-tabs button');
+    const badge = document.getElementById('team-badge');
+    let current = 'tami', unread = 0;
+    window.showChatTab = function (name) {
+        current = name;
+        tabs.forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+        document.querySelectorAll('.tab-pane').forEach(p => p.hidden = p.dataset.pane !== name);
+        if (name === 'team') {
+            unread = 0; badge.hidden = true;
+            const box = document.getElementById('team-chat');
+            box.scrollTop = box.scrollHeight;
+        }
+    };
+    tabs.forEach(b => b.addEventListener('click', () => window.showChatTab(b.dataset.tab)));
+
+    // [2] 팀 채팅 - party/room.html 과 같은 소켓 주소/번역 API
+    if (!ROOM_ID) return;
+    const box = document.getElementById('team-chat');
+
+    function append(msg) {
+        const div = document.createElement('div');
+        if (msg.type === 'SYSTEM') {
+            div.className = 'msg sys';
+            div.textContent = msg.content;
+        } else {
+            div.className = 'msg ' + (msg.senderName === MY_NAME ? 'me' : 'bot');
+            const who = document.createElement('span');
+            who.className = 'who';
+            who.textContent = msg.senderName;
+            const text = document.createElement('span');
+            text.textContent = msg.content;
+            const tr = document.createElement('button');
+            tr.type = 'button'; tr.className = 'tr'; tr.textContent = '번역';
+            let translated = null;
+            tr.addEventListener('click', async () => {
+                if (tr.textContent === '원문') { text.textContent = msg.content; tr.textContent = '번역'; return; }
+                tr.disabled = true;
+                try {
+                    if (translated === null) {
+                        const res = await window.api.post('/api/chat/translate', { text: msg.content, targetLang: UI_LANG === 'ja' ? 'JA' : 'KO' });
+                        if (res.success && res.data) translated = res.data;
+                    }
+                    if (translated !== null) { text.textContent = translated; tr.textContent = '원문'; }
+                } finally { tr.disabled = false; }
+            });
+            div.append(who, text, tr);
+        }
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    if (Array.isArray(INITIAL_CHAT_HISTORY)) INITIAL_CHAT_HISTORY.forEach(append);
+
+    let connected = false;
+    const stomp = Stomp.over(new SockJS('/ws'));
+    stomp.debug = null;
+    stomp.connect({}, () => {
+        connected = true;
+        stomp.subscribe(`/topic/chat/${ROOM_ID}`, m => {
+            try { append(JSON.parse(m.body)); } catch (e) { return; }
+            if (current !== 'team') { badge.textContent = ++unread; badge.hidden = false; }
+        });
+    }, err => console.error('Team chat connection error:', err));
+
+    const inp = document.getElementById('team-text');
+    function send() {
+        const v = inp.value.trim();
+        if (!v) return;
+        if (!connected) { alert('채팅 서버 접속을 기다려주세요.'); return; }
+        stomp.send(`/app/chat.send/${ROOM_ID}`, {}, JSON.stringify({ content: v }));
+        inp.value = '';
+    }
+    document.getElementById('team-send').addEventListener('click', send);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) send(); });
+})();
+</script>
+
+<!-- 타미 Live2D 캐릭터만 띄운다. 대화는 옆 패널 타미 탭에서 하므로 위젯 채팅창/버튼은 숨김. -->
+<style>#companion-chat-panel, #companion-chat-open { display: none !important; }</style>
+<div id="companion-widget-container" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; pointer-events: none;">
+
+    <!-- 1. 채팅 패널 (캐릭터 왼쪽에 표시됨) -->
+    <div id="companion-chat-panel" style="display: none; position: fixed; right: 300px; bottom: 20px; width: 450px; height: 600px; background: #f0f2f5; border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); flex-direction: column; overflow: hidden; pointer-events: auto;">
+
+        <!-- 패널 상단 타이틀바 -->
+        <div id="companion-chat-drag-handle" style="background: var(--forest, #1b4a9c); color: white; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; cursor: grab;">
+            <span>🎒 타미과 여행 계획 짜기</span>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <button id="companion-chat-clear" title="대화 기록 초기화" style="background: none; border: none; color: white; font-size: 13px; cursor: pointer; text-decoration: underline;">초기화</button>
+                <button id="companion-chat-close" style="background: none; border: none; color: white; font-size: 18px; cursor: pointer;">✖</button>
+            </div>
+        </div>
+        
+        <!-- 컨트롤바 (크기 조절, 표정 변경) -->
+        <div style="padding: 8px 12px; background: #e9ecef; border-bottom: 1px solid #dfe4ec; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #14203a;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: bold; white-space: nowrap;">크기 조절</span>
+                <input type="range" id="companion-scale-slider" min="0.5" max="2.0" step="0.1" value="1.0" style="flex: 1; accent-color: var(--forest, #1b4a9c);">
+                <span id="companion-scale-val" style="width: 30px; text-align: right;">1.0</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: bold; white-space: nowrap;">캐릭터 표정</span>
+                <div id="companion-expr-btns" style="display: flex; gap: 5px; flex-wrap: wrap;">
+                    <button id="companion-ghost-btn" style="padding: 4px 8px; font-size: 11px; border: 1px solid #dfe4ec; background: #ffeb3b; border-radius: 4px; cursor: pointer; font-weight: bold;">👻 숨기기</button>
+                      <div style="width: 1px; background: #dfe4ec; margin: 0 4px;"></div>
+                      <label style="cursor:pointer; display:flex; align-items:center; gap:4px; font-weight:bold; color:var(--forest, #1b4a9c); margin-left:auto;"><input type="checkbox" id="companion-show-bot-chat"> 채팅방 출력 ✏️</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- 대화 내역 공간 -->
+        <div id="companion-chat-log" style="flex: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+            <!-- 말풍선이 여기에 JS로 생성됨 -->
+        </div>
+
+        <!-- 입력창 -->
+        <div style="padding: 12px; background: white; border-top: 1px solid #dfe4ec; display: flex; gap: 8px;">
+            <input type="text" id="companion-chat-input" placeholder="타미에게 물어보세요!" style="flex: 1; padding: 10px; border: 1px solid #dfe4ec; border-radius: 8px; outline: none;">
+            <button id="companion-chat-send" style="background: var(--forest, #1b4a9c); color: white; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; flex-shrink: 0; white-space: nowrap;">전송</button>
+        </div>
+    </div>
+
+        <!-- 2. 캐릭터 캔버스 -->
+    <button id="companion-chat-open" style="pointer-events: auto; position: fixed; right: 40px; bottom: 40px; padding: 12px 24px; background: var(--forest, #1b4a9c); color: white; border: 2px solid white; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.3); font-size: 15px; transition: all 0.2s; z-index: 10000;">💬 대화하기</button>
+        <div id="companion-character-wrap" style="position: fixed; right: 180px; bottom: 20px; width: 240px; height: 320px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end; pointer-events: none; z-index:9999;">
+        <div id="companion-speech-bubble" style="display: none; position: absolute; right: calc(140px * var(--vivian-scale, 1)); bottom: calc(220px * var(--vivian-scale, 1)); transform: scale(var(--vivian-scale, 1)); transform-origin: bottom right; background: #FFF9E6; padding: 14px 20px; border-radius: 20px; border: 2px solid #F4D03F; color: #784212; box-shadow: 0 8px 24px rgba(0,0,0,0.15); width: 250px; max-height: 150px; overflow-y: auto; font-size: 14px; font-weight: 700; z-index: 10001; word-break: keep-all; pointer-events: auto;"></div>
+        <canvas id="companion-canvas" style="pointer-events: auto; cursor: grab; filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.2)); transition: filter 0.2s;"></canvas>
+    </div>
+
+    <!-- Live2D 라이브러리는 이 위젯을 쓰는 화면에서만 불러온다. 예전엔 공통 head 에 있어서
+         위젯이 없는 화면까지 CDN 스크립트 4개를 매번 받았다. 순서 중요 - companion-widget.js 가
+         이 전역(PIXI, Live2DCubismCore)을 바로 쓴다. -->
+    <script src="https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/dylanNew/live2d/webgl/Live2D/lib/live2d.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@6.5.2/dist/browser/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pixi-live2d-display/dist/index.min.js"></script>
+    <script src="/tanoshimi/js/companion-widget.js?v=999129"></script>
+</div>
+
+<script src="/tanoshimi/js/planner.js?v=102" defer></script>
+<script src="/tanoshimi/js/planner-owner.js" defer></script>
+<footer class="site-footer">
+    <div class="seigaiha" style="--wave:rgba(143,178,230,.13); position:absolute; inset:0; opacity:.7; pointer-events:none;"></div>
+
+    <div class="footer-inner">
+        <div class="footer-brand">
+            <span class="brand" style="color:#fff;">
+                <span class="brand-mark" aria-hidden="true">楽</span>
+                <span class="brand-word">Tanoshimi</span>
+            </span>
+            <p>혼자여도 괜찮고, 같이면 더 좋은 여행.<br>타노시미는 같은 날 같은 도시로 떠나는 사람들을 이어줍니다.</p>
+        </div>
+
+        <nav class="footer-nav">
+            <div class="footer-col">
+                <h4>둘러보기</h4>
+                <a href="/tanoshimi/party-board">파티 찾기</a>
+                <a href="/tanoshimi/recommendations">관광지 둘러보기</a>
+                <a href="/tanoshimi/board">여행 스냅</a>
+                <a href="/tanoshimi/planner">여행 플래너</a>
+            </div>
+            <div class="footer-col">
+                <h4>내 계정</h4>
+                <a href="/tanoshimi/mypage">마이페이지</a>
+                <a href="/tanoshimi/my-parties">내 파티</a>
+                <a href="/tanoshimi/messages">메시지함</a>
+            </div>
+            <div class="footer-col">
+                <h4>고객지원</h4>
+                <a href="/tanoshimi/support/write">문의하기</a>
+                <a href="/tanoshimi/support">문의 내역</a>
+            </div>
+        </nav>
+    </div>
+
+    <div class="footer-base">
+        <span>© 2026 Tanoshimi. 팀 프로젝트용 데모 서비스입니다.</span>
+        <span>사진 : Wikimedia Commons (CC BY-SA) · 자세한 출처는 /assets/theme/CREDITS.txt</span>
+    </div>
+</footer>
+
+</body>
+</html>
