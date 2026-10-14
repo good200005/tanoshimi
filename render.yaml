@@ -48,3 +48,14 @@ services:
         value: dummy
       - key: LINE_CLIENT_SECRET
         value: dummy
+      # --- 이메일 인증 실발송(SMTP). 값은 대시보드에서 입력(Gmail 은 앱 비밀번호) ---
+      - key: APP_EMAIL_PROVIDER
+        value: smtp
+      - key: MAIL_HOST
+        value: smtp.gmail.com
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
