@@ -34,6 +34,7 @@ done
 | `SERVER_SERVLET_SESSION_COOKIE_SECURE=true` | HTTPS 쿠키(application.yml 주석의 "배포 시 true") |
 | `REMEMBER_ME_KEY` | 자동 로그인 서명 키 — Render 가 자동 생성 |
 | `UPLOAD_DIR=/tmp/uploads` | 업로드 저장 위치. **무료 플랜은 재시작 시 사라짐** |
+| `APP_EMAIL_PROVIDER`, `MAIL_HOST/USERNAME/PASSWORD/FROM` | 가입 인증 메일 실발송(smtp). Gmail 은 앱 비밀번호 사용 |
 | `*_CLIENT_ID/SECRET` | 소셜 로그인. 비면 기동 실패하므로 기본 `dummy`, 발급 후 교체 |
 
 ## 소셜 로그인 키 발급 후
@@ -41,5 +42,5 @@ done
 
 ## 한계 (무료 플랜)
 - 15분 무요청 시 슬립 → 첫 접속 30~60초 지연.
-- 업로드 이미지 휘발(영구 보관은 S3 등 필요). 이메일 인증은 `log` 모드라 인증번호가 Render 로그에만 찍힌다. 데모는 시드 계정(`yuja@test.com` / `Test1234!`)으로 로그인.
+- 업로드 이미지 휘발(영구 보관은 S3 등 필요). 이메일 인증은 SMTP 환경변수를 넣어야 실제 발송된다(미설정 시 발송 실패). 데모는 시드 계정(`yuja@test.com` / `Test1234!`)으로도 로그인 가능.
 - AI 챗봇·날씨·번역은 `mock` 이 기본. 외부 AI 키를 넣으면 호출 요금이 발생한다.
