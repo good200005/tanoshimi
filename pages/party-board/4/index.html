@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    
+    <title>한일 친구들과 함께하는 도쿄 디즈니 여행 | 타노시미 - Tanoshimi</title>
+    
+    <link rel="icon" type="image/svg+xml" href="/tanoshimi/assets/favicon.svg">
+
+    <link rel="stylesheet" href="/tanoshimi/css/app.css">
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard-dynamic-subset.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&family=Fraunces:opsz,wght,SOFT@9..144,500..700,100&display=swap" rel="stylesheet">
+
+    <!-- CSP 통신(인라인 스크립트 대응)을 위한 함수 구조 -->
+    <script>
+        window.api = {
+            async get(url) {
+                try {
+                    const r = await fetch(url);
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async post(url, data) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = { 'Content-Type': 'application/json' };
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+
+                try {
+                    const r = await fetch(url, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(data)
+                    });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async patch(url, data={}) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = { 'Content-Type': 'application/json' };
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+                try {
+                    const r = await fetch(url, { method: 'PATCH', headers: headers, body: JSON.stringify(data) });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async del(url) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = {};
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+                try {
+                    const r = await fetch(url, { method: 'DELETE', headers: headers });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            }
+        };
+    </script>
+    <script src="/tanoshimi/js/report.js" defer></script>
+    <!-- 실시간 알림용 웹소켓 라이브러리 - 외부 CDN 대신 저장소에 둔 사본(static/vendor, CDN 과 같은
+         sockjs-client 1.6.1 / stomp.js 2.3.3)을 쓴다. CDN 이 오염되면 변조된 스크립트가 모든 화면에서
+         실행될 수 있어서(CodeQL js/functionality-from-untrusted-source). -->
+    <script src="/tanoshimi/vendor/sockjs.min.js"></script>
+    <script src="/tanoshimi/vendor/stomp.min.js"></script>
+    <script src="/tanoshimi/js/notifications.js" defer></script>
+<script>window.__STATIC_DEMO__=true;</script></head>
+    <style>
+      a.back { display:inline-block; text-decoration:none; color:var(--ink-soft); font-size:14px; transition:color .2s; }
+      a.back:hover { color:var(--forest); }
+      .pm-list { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px; }
+      .pm-list li { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:12px; background:#f8f9fb; border:1px solid #dfe4ec; }
+      .pm-list li.is-owner { border-color:var(--sash); background:rgba(224,121,63,.06); }
+      .pm-pf { width:40px; height:40px; flex-shrink:0; border-radius:50%; object-fit:cover; background:#e7edf8; color:#1b4a9c; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:18px; line-height:1; }
+      .pm-info { flex:1; min-width:0; }
+      .pm-name { font-weight:700; font-size:15px; margin:0; color:var(--ink); display:flex; flex-wrap:wrap; align-items:center; gap:2px; }
+      .pm-owner { color:var(--sash); font-size:12px; margin-left:4px; }
+      .pm-meta { font-size:12.5px; color:var(--ink-soft); margin:3px 0 0; }
+      a.pm-link { color:inherit; text-decoration:none; }
+      a.pm-link:hover .pm-name-text, a.pm-link:focus-visible .pm-name-text { text-decoration:underline; }
+    </style>
+</head>
+<div style="background:#1f2937;color:#fff;font:13px/1.4 sans-serif;padding:6px 12px;text-align:center">정적 데모 화면입니다. 로그인·저장·채팅 등 서버 기능은 동작하지 않습니다.</div>
+<header class="site-header">
+    <div class="hdr">
+
+        <!-- 왼쪽 : 로고 + 주요 메뉴 -->
+        <div class="hdr-left">
+            <a href="/tanoshimi/" class="brand">
+                <span class="brand-mark" aria-hidden="true">楽</span>
+                <span class="brand-word">Tanoshimi</span>
+            </a>
+            <nav class="gnb-main hide-mobile">
+                <a href="/tanoshimi/recommendations">관광지 둘러보기</a>
+                <a href="/tanoshimi/party-board">파티 찾기</a>
+                <a href="/tanoshimi/board">여행 스냅</a>
+                <a href="/tanoshimi/my-parties">내 파티</a>
+            </nav>
+        </div>
+
+        <!-- 오른쪽 : 언어 / 계정 / 알림 / 메뉴 -->
+        <div class="hdr-right">
+
+            <div class="lang-seg hide-mobile">
+                <a href="?lang=ko" class="on">KO</a>
+                <a href="?lang=ja">JP</a>
+            </div>
+
+            
+
+            
+                <!-- 프로필 + 드롭다운 -->
+                <div id="profile-menu-wrap" style="position:relative;">
+                    <div class="profile-btn" id="profile-btn">
+                        
+                        <div class="avatar-txt">유</div>
+                        <span class="profile-name hide-mobile">유자차</span>
+                    </div>
+
+                    <div class="menu-pop" id="profile-dropdown" style="display:none;">
+                        
+                        <a href="/tanoshimi/mypage">마이페이지</a>
+                        <a href="/tanoshimi/mypage/account">계정 관리</a>
+                        <form action="/tanoshimi/logout" method="post">
+                            <button type="submit" class="danger">로그아웃</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 알림 -->
+                <div class="notif-wrap">
+                    <span class="notif-bell" id="top-notif-bell" role="button" aria-label="알림">
+                        🔔
+                        <span class="notif-badge" id="top-notif-badge">0</span>
+                    </span>
+                    <div class="notif-dropdown" id="top-notif-dropdown" style="display:none;">
+                        <div class="notif-dropdown-title">신규 알림</div>
+                        <div class="notif-list" id="top-notif-list">
+                            <p class="notif-empty">새로운 알림이 없습니다.</p>
+                        </div>
+                    </div>
+                </div>
+            
+
+            <button id="sidebar-toggle-btn" class="menu-btn" aria-label="전체 메뉴">☰</button>
+        </div>
+    </div>
+
+    <!-- 임시 비밀번호로 로그인한 경우 강제 비밀번호 변경 모달 (비밀번호 재발급 워크플로우).
+         닫기/취소 버튼이 없다 - 바꾸기 전까지는 어떤 페이지를 가든 다시 뜬다. -->
+    
+     
+    
+
+    <!-- 우측 슬라이드 메뉴 (id 는 아래 스크립트가 잡습니다) -->
+    <div id="right-sidebar" class="side-panel">
+        <div class="side-panel-head">
+            <h2>MENU</h2>
+            <button id="sidebar-close-btn" aria-label="닫기">✕</button>
+        </div>
+        <ul class="side-nav">
+            
+            <li><a href="/tanoshimi/recommendations">⛩️ 관광지 둘러보기</a></li>
+            <li><a href="/tanoshimi/party-board">👫 파티 찾기</a></li>
+            <li><a href="/tanoshimi/board">📸 여행 스냅</a></li>
+            <li><a href="/tanoshimi/my-parties">🧳 내 파티</a></li>
+            <li><a href="/tanoshimi/messages">💬 개인 메시지함</a></li>
+            <li><a href="/tanoshimi/planner">🗾 여행 플래너</a></li>
+        </ul>
+    </div>
+
+    <script>
+        document.getElementById('profile-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = document.getElementById('profile-dropdown');
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        document.getElementById('top-notif-bell')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = document.getElementById('top-notif-dropdown');
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        const sidebar = document.getElementById('right-sidebar');
+        document.getElementById('sidebar-toggle-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.style.right = '0';
+            document.body.classList.add('sidebar-open');
+        });
+        document.getElementById('sidebar-close-btn')?.addEventListener('click', () => {
+            sidebar.style.right = '-320px';
+            document.body.classList.remove('sidebar-open');
+        });
+
+        document.addEventListener('click', (e) => {
+            const dp1 = document.getElementById('profile-dropdown');
+            if(dp1 && !dp1.contains(e.target)) dp1.style.display = 'none';
+
+            const dp2 = document.getElementById('top-notif-dropdown');
+            if(dp2 && !dp2.contains(e.target)) dp2.style.display = 'none';
+
+            if (sidebar && sidebar.style.right === '0px' && !sidebar.contains(e.target)) {
+                sidebar.style.right = '-320px';
+                document.body.classList.remove('sidebar-open');
+            }
+        });
+    </script>
+</header>
+
+<main class="wrap" style="max-width:800px; padding:20px;">
+  <div style="margin-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+    <a class="back" href="/tanoshimi/party-board">← 목록으로</a>
+    <button type="button" style="font-size:12px; color:var(--ink-soft); background:none; border:none; cursor:pointer;" data-report-type="party" data-report-id="4" data-report-label="한일 친구들과 함께하는 도쿄 디즈니 여행">🚨 신고</button>
+  </div>
+
+  <div class="party-box" style="background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden;">
+    <div style="position:relative; height:200px;">
+      <div class="ph1"
+           style="position:absolute; inset:0; background-image:url(/assets/places/tokyo_shibuya.jpg); background-size:cover; background-position:center;"></div>
+
+      <div style="position:absolute; top:12px; left:12px; display:flex; gap:6px;">
+        <span class="chip chip-region" style="background:var(--sky); color:#0f2247; font-size:12px; font-weight:700; border-radius:999px; padding:4px 11px; display:inline-block;">📍 도쿄</span>
+
+        <!-- '모집중'은 status==recruiting 뿐 아니라 출발일이 오늘보다 뒤일 때만 뜬다 - 출발 당일부터는
+             신청 자체를 막기로 했으므로(PartyApplicationService.apply) 화면 문구도 그 기준을 따라야
+             실제 신청 가능 여부와 어긋나지 않는다. -->
+        <span class="chip" style="font-size:12px; font-weight:700; border-radius:999px; padding:4px 11px; display:inline-block; background:var(--forest);color:#fff;">모집중</span>
+      </div>
+
+      
+
+      <!-- '마감'은 날짜 계산(endDate=departureDate+durationDays) 대신 party.status가 completed
+           인지로만 판정한다 - PartyCompletionScheduler가 매일 00:30에 endDate 경과 파티를 completed
+           로 바꿔주는데, 날짜만으로 계산하면 자정~00:30 사이엔 "아직 completed 는 아닌데 날짜상으론
+           종료"인 상태가 생겨 위 모집상태 칩과 모순될 수 있다. status를 그대로 신뢰하면 두 뱃지가
+           항상 같은 정보를 기준으로 삼게 되어 이 레이스도 원천 차단된다. -->
+      <span style="position:absolute; bottom:12px; right:12px; background:rgba(58,46,34,.72); color:#fff; font-size:12px; border-radius:999px; padding:4px 10px;">D-157</span>
+    </div>
+    
+    <div style="padding:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <h1 style="font-size:21px; margin:0;" id="party-title">한일 친구들과 함께하는 도쿄 디즈니 여행</h1>
+        <button type="button" class="btn translate-btn" style="font-size:10px; padding:4px 8px; border:1px solid var(--line); border-radius:4px; cursor:pointer; background:#fff;" onclick="translatePost()">번역 🌍</button>
+      </div>
+
+      <p style="color:var(--ink-soft); font-size:13px; margin-top:6px; line-height:1.5;" id="party-desc">한국인·일본인 누구나 환영하는 한일 교류 파티입니다.</p>
+
+      <div style="margin-top:16px; padding:16px; background:#f8f9fb; border-radius:8px; display:flex; flex-direction:column; gap:8px; font-size:13px;">
+        <div style="display:flex; justify-content:space-between;">
+          <span>일정 <b>2027-03-20</b></span>
+          <span>예산 <b>50만원 내외</b></span>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span>성별 <b>성별 무관</b></span>
+          <span>모집인원 <b>6명</b></span>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          
+          
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 파티장·파티원 - 신청 전에 누구와 함께 가는지 확인할 수 있게(화면설계서 S-11 "방장 정보").
+       파티장이 맨 위(PartyController.detail 정렬). 모양은 파티방 멤버 목록과 맞췄다. -->
+  <section class="party-members" style="margin-top:24px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px;">
+    <h2 style="font-size:15px; margin-top:0;">
+      <span>파티 멤버</span>
+      <span style="font-size:13px; color:var(--forest);">1/6</span>
+    </h2>
+    <ul class="pm-list">
+      <li class="is-owner">
+        <a class="pm-link" href="/tanoshimi/users/6" tabindex="-1" aria-hidden="true">
+          
+          <div class="pm-pf">라</div>
+        </a>
+        <div class="pm-info">
+          <p class="pm-name">
+            <a class="pm-link" href="/tanoshimi/users/6" title="라멘러버"><span class="pm-name-text">라멘러버</span></a>
+            <span class="pm-owner">(방장)</span>
+            
+              
+            
+          </p>
+          <p class="pm-meta">🇰🇷 · 🌡️ 37.3℃</p>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <div style="margin-top:24px; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px;">
+    <h2 style="font-size:15px; margin-top:0;">참가 신청하기</h2>
+    
+    
+
+    <div>
+      <div style="margin-bottom:12px;">
+        <textarea id="apply-message" maxlength="300" placeholder="간단한 자기소개나 인사말을 남겨주세요"
+                  style="width:100%; min-height:80px; padding:10px; border:1px solid var(--line); border-radius:8px; font-family:inherit;"></textarea>
+      </div>
+      <div style="text-align:right;">
+        <button type="button" class="btn btn-primary" id="btn-apply"
+                data-party-id="4">참가 신청하기</button>
+      </div>
+    </div>
+  </div>
+  
+</main>
+<script src="/tanoshimi/js/csrf.js"></script>
+<script>
+  const MSG_ERROR = "\uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4.";
+
+  const btnApply = document.getElementById('btn-apply');
+  if (btnApply) {
+      btnApply.addEventListener('click', async () => {
+          const msg = document.getElementById('apply-message').value.trim();
+          const partyId = btnApply.dataset.partyId;
+          const body = { message: msg };
+          
+          let csrfToken = document.querySelector('meta[name="_csrf"]')?.content || '';
+          let csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content || 'X-CSRF-TOKEN';
+          
+          try {
+              const res = await fetch(`/api/parties/${partyId}/apply`, {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      ...(csrfToken ? {[csrfHeader]: csrfToken} : {})
+                  },
+                  body: JSON.stringify(body)
+              });
+              const data = await res.json();
+              if (data.success) {
+                  window.location.href = '/my-parties';
+              } else {
+                  alert(data.message || MSG_ERROR);
+              }
+          } catch (e) {
+              alert(MSG_ERROR);
+          }
+      });
+  }
+
+  async function translatePost() {
+      const titleEl = document.getElementById('party-title');
+      const descEl = document.getElementById('party-desc');
+      let docLang = document.documentElement.lang;
+      const targetLang = docLang === 'ja' ? 'ja' : 'ko';
+      try {
+          const r1 = await window.api.post('/api/chat/translate', {text: titleEl.textContent, targetLang: targetLang});
+          if(r1.success) titleEl.textContent = r1.data;
+          const r2 = await window.api.post('/api/chat/translate', {text: descEl.textContent, targetLang: targetLang});
+          if(r2.success) descEl.textContent = r2.data;
+      } catch(e) {}
+  }
+  
+  if (document.documentElement.lang === 'ja') {
+      window.addEventListener('load', () => translatePost());
+  }
+
+  async function changeThumbnail() {
+      const fileInput = document.getElementById('thumbnail-upload');
+      const file = fileInput.files[0];
+      if (!file) return;
+      const partyId = window.location.pathname.split('/').pop();
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      let csrfToken = document.querySelector('meta[name="_csrf"]')?.content || '';
+      let csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content || 'X-CSRF-TOKEN';
+      
+      try {
+          const res = await fetch(`/api/parties/${partyId}/thumbnail`, {
+              method: 'POST',
+              headers: csrfToken ? {[csrfHeader]: csrfToken} : {},
+              body: formData
+          });
+          const data = await res.json();
+          if (data.success) {
+              window.location.reload();
+          } else {
+              alert(data.message || MSG_ERROR);
+          }
+      } catch (e) {
+          alert('오류가 발생했습니다.');
+      }
+  }
+</script>
+<footer class="site-footer">
+    <div class="seigaiha" style="--wave:rgba(143,178,230,.13); position:absolute; inset:0; opacity:.7; pointer-events:none;"></div>
+
+    <div class="footer-inner">
+        <div class="footer-brand">
+            <span class="brand" style="color:#fff;">
+                <span class="brand-mark" aria-hidden="true">楽</span>
+                <span class="brand-word">Tanoshimi</span>
+            </span>
+            <p>혼자여도 괜찮고, 같이면 더 좋은 여행.<br>타노시미는 같은 날 같은 도시로 떠나는 사람들을 이어줍니다.</p>
+        </div>
+
+        <nav class="footer-nav">
+            <div class="footer-col">
+                <h4>둘러보기</h4>
+                <a href="/tanoshimi/party-board">파티 찾기</a>
+                <a href="/tanoshimi/recommendations">관광지 둘러보기</a>
+                <a href="/tanoshimi/board">여행 스냅</a>
+                <a href="/tanoshimi/planner">여행 플래너</a>
+            </div>
+            <div class="footer-col">
+                <h4>내 계정</h4>
+                <a href="/tanoshimi/mypage">마이페이지</a>
+                <a href="/tanoshimi/my-parties">내 파티</a>
+                <a href="/tanoshimi/messages">메시지함</a>
+            </div>
+            <div class="footer-col">
+                <h4>고객지원</h4>
+                <a href="/tanoshimi/support/write">문의하기</a>
+                <a href="/tanoshimi/support">문의 내역</a>
+            </div>
+        </nav>
+    </div>
+
+    <div class="footer-base">
+        <span>© 2026 Tanoshimi. 팀 프로젝트용 데모 서비스입니다.</span>
+        <span>사진 : Wikimedia Commons (CC BY-SA) · 자세한 출처는 /assets/theme/CREDITS.txt</span>
+    </div>
+</footer>
+</body>
+</html>

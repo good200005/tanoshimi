@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    
+    <title>남자 셋이서 홋카이도 스키+온천 여행 갈 사람 - Tanoshimi</title>
+    
+    <link rel="icon" type="image/svg+xml" href="/tanoshimi/assets/favicon.svg">
+
+    <link rel="stylesheet" href="/tanoshimi/css/app.css">
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard-dynamic-subset.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&family=Fraunces:opsz,wght,SOFT@9..144,500..700,100&display=swap" rel="stylesheet">
+
+    <!-- CSP 통신(인라인 스크립트 대응)을 위한 함수 구조 -->
+    <script>
+        window.api = {
+            async get(url) {
+                try {
+                    const r = await fetch(url);
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async post(url, data) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = { 'Content-Type': 'application/json' };
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+
+                try {
+                    const r = await fetch(url, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(data)
+                    });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async patch(url, data={}) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = { 'Content-Type': 'application/json' };
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+                try {
+                    const r = await fetch(url, { method: 'PATCH', headers: headers, body: JSON.stringify(data) });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async del(url) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = {};
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+                try {
+                    const r = await fetch(url, { method: 'DELETE', headers: headers });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            }
+        };
+    </script>
+    <script src="/tanoshimi/js/report.js" defer></script>
+    <!-- 실시간 알림용 웹소켓 라이브러리 - 외부 CDN 대신 저장소에 둔 사본(static/vendor, CDN 과 같은
+         sockjs-client 1.6.1 / stomp.js 2.3.3)을 쓴다. CDN 이 오염되면 변조된 스크립트가 모든 화면에서
+         실행될 수 있어서(CodeQL js/functionality-from-untrusted-source). -->
+    <script src="/tanoshimi/vendor/sockjs.min.js"></script>
+    <script src="/tanoshimi/vendor/stomp.min.js"></script>
+    <script src="/tanoshimi/js/notifications.js" defer></script>
+<script>window.__STATIC_DEMO__=true;</script></head>
+<style>
+  body { background:var(--parchment); margin:0; padding:0; font-family:'Pretendard', sans-serif; }
+  
+  .wrap { max-width:1200px; margin:0 auto; padding:30px 20px; display:grid; grid-template-columns:1fr 340px; gap:24px; align-items:start; }
+  @media(max-width:900px) { .wrap { grid-template-columns:1fr; } }
+  
+  .main-col { display:flex; flex-direction:column; gap:24px; }
+  
+  /* 파티 헤더 */
+  .p-header { background:var(--card); border-radius:24px; padding:32px; border:1px solid var(--line); position:relative; overflow:hidden; }
+  .p-thumb { width:100%; height:280px; border-radius:16px; object-fit:cover; margin-bottom:24px; background:var(--line); box-shadow:0 8px 24px rgba(0,0,0,.06); }
+  /* 사진 없는 파티의 헤더 - 위 .p-thumb 배경에 덮이지 않게 app.css 의 ph1~ph4 팔레트를 한 단계 구체적으로 다시 지정 */
+  .p-thumb.ph1{ background:linear-gradient(135deg,var(--sky),#cfe0f3); }
+  .p-thumb.ph2{ background:linear-gradient(135deg,#dbe7f5,var(--parchment-deep)); }
+  .p-thumb.ph3{ background:linear-gradient(135deg,#e4e6f3,#c3c8e4); }
+  .p-thumb.ph4{ background:linear-gradient(135deg,#f0e7e4,#dcc7c0); }
+  .p-title { font-size:28px; font-weight:900; color:var(--ink); margin:0 0 12px; }
+  .p-meta { font-size:15px; color:var(--ink-soft); font-weight:600; margin:0; display:flex; gap:12px; flex-wrap:wrap; }
+  .badge { background:var(--sky); color:var(--forest-deep); padding:6px 12px; border-radius:6px; font-size:13px; font-weight:800; }
+  
+  .btn-change-thumb { position:absolute; top:24px; right:24px; background:rgba(255,255,255,.9); border:none; padding:8px 12px; border-radius:8px; font-weight:700; cursor:pointer; font-size:13px; box-shadow:0 4px 12px rgba(0,0,0,.1); }
+
+  /* 섹션 공통 */
+  .sec { background:var(--card); border-radius:24px; padding:32px; border:1px solid var(--line); }
+  .sec-title { font-size:20px; font-weight:800; color:var(--ink); margin:0 0 20px; display:flex; align-items:center; justify-content:space-between; }
+  
+  /* 멤버/신청자 리스트 */
+  .ul-users { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:12px; }
+  .ul-users li { display:flex; align-items:center; gap:12px; padding:12px; border-radius:12px; background:#f8f9fb; border:1px solid #dfe4ec; }
+  .ul-users .pf { width:40px; height:40px; border-radius:50%; object-fit:cover; background:#e7edf8; color:#1b4a9c; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:18px; line-height:1; }
+  .ul-users .info { flex:1; }
+  .ul-users .name { font-weight:700; font-size:15px; margin:0; color:var(--ink); }
+  .ul-users .msg { font-size:13px; color:var(--ink-soft); margin:4px 0 0; }
+  .ul-users a.member-link { color:inherit; text-decoration:none; }
+  .ul-users a.member-link:hover .member-name, .ul-users a.member-link:focus-visible .member-name { text-decoration:underline; }
+  
+  .btn-sm-ok { background:var(--forest); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:700; cursor:pointer; font-size:13px; }
+  .btn-sm-no { background:var(--sash); color:#fff; border:none; padding:6px 12px; border-radius:6px; font-weight:700; cursor:pointer; font-size:13px; }
+
+  /* 추억 사진첩 */
+  .grid-photos { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px; }
+  .photo-card { aspect-ratio:1; border-radius:12px; overflow:hidden; position:relative; background:#dfe4ec; cursor:pointer; }
+  .photo-card img { width:100%; height:100%; object-fit:cover; transition:transform .3s; }
+  .photo-card:hover img { transform:scale(1.05); }
+  .photo-overlay { position:absolute; inset:0; background:linear-gradient(0deg, rgba(0,0,0,.5), transparent); display:flex; align-items:flex-end; padding:12px; opacity:0; transition:.2s; }
+  .photo-card:hover .photo-overlay { opacity:1; }
+  .photo-overlay span { color:#fff; font-size:12px; font-weight:700; }
+
+  .btn-write { background:var(--sky-deep); color:var(--forest-deep); border:none; padding:6px 12px; border-radius:6px; font-weight:800; cursor:pointer; font-size:14px; }
+
+  /* 우측 사이드바 (채팅/투표) */
+  .side-col { display:flex; flex-direction:column; gap:24px; position:sticky; top:30px; }
+  
+  .chat-box { flex:1; min-height:400px; display:flex; flex-direction:column; background:var(--card); border-radius:24px; border:1px solid var(--line); overflow:hidden; }
+  .chat-head { padding:16px 20px; background:var(--forest); color:#fff; font-weight:800; font-size:16px; display:flex; justify-content:space-between; align-items:center; }
+  .chat-msg-area { flex:none; padding:20px; overflow-y:auto; background:#f8f9fb; display:flex; flex-direction:column; gap:12px; height: 400px; }
+  .chat-ctrl { padding:16px; border-top:1px solid var(--line); display:flex; gap:8px; background:#fff; }
+  .chat-ctrl input { flex:1; padding:12px 16px; border-radius:999px; border:1px solid var(--line); font-size:14px; }
+  .chat-ctrl input:focus { outline:none; border-color:var(--forest); }
+  .chat-ctrl button { background:var(--forest); color:#fff; border:none; padding:0 24px; border-radius:999px; font-weight:800; cursor:pointer; }
+  
+  .msg-row { display:flex; flex-direction:column; max-width:85%; }
+  .msg-row.me { align-self:flex-end; align-items:flex-end; }
+  .msg-row.other { align-self:flex-start; align-items:flex-start; }
+  .msg-info { font-size:11px; color:#98a1b4; margin-bottom:4px; font-weight:600; }
+  .msg-row.sys .msg-info { display:none; }
+  .msg-bubble { padding:10px 16px; border-radius:16px; font-size:14px; line-height:1.4; word-break:break-all; position:relative;}
+  .msg-row.me .msg-bubble { background:var(--sky); color:var(--ink); border-bottom-right-radius:4px; }
+  .msg-row.other .msg-bubble { background:#fff; border:1px solid var(--line); color:var(--ink); border-bottom-left-radius:4px; }
+  .msg-row.sys { align-self:center; max-width:100%; }
+  .msg-row.sys .msg-bubble { background:transparent; border:none; color:var(--ink-soft); font-size:12px; font-weight:700; text-align:center; }
+
+  .vote-box { background:var(--bg-sun); border-radius:24px; padding:24px; border:1px solid #f6eed3; }
+  .vote-box h3 { margin:0 0 12px; font-size:16px; color:var(--ink); }
+  .vote-btns { display:flex; gap:8px; margin-top:16px; }
+  .vote-btns button { flex:1; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; border:none; border:1px solid rgba(0,0,0,.1); }
+  .btn-agree { background:#fff; color:var(--forest); }
+  .btn-disagree { background:#fff; color:var(--sash); }
+
+  /* 모달 */
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:999; display:none; align-items:center; justify-content:center; padding: 20px;}
+  .modal-box { background:#fff; width:100%; max-width:500px; max-height:80vh; overflow-y:auto; border-radius:24px; padding:32px; display:flex; flex-direction:column; gap:16px; box-sizing: border-box; }
+  .modal-box h3 { margin:0; font-size:20px; font-weight:800; color:var(--ink); }
+  .modal-box input[type="text"], .modal-box textarea { width:100%; padding:12px; box-sizing:border-box; border:1px solid var(--line); border-radius:8px; font-size:14px; }
+  .modal-box textarea { height:120px; resize:none; }
+  .modal-box .actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+  .modal-box .actions button { padding:10px 20px; border-radius:8px; font-weight:700; cursor:pointer; border:none; }
+  .btn-modal-x { background:#dfe4ec; color:var(--ink-soft); }
+  .btn-modal-ok { background:var(--forest); color:#fff; }
+  #v-comments a.comment-author { font-weight:700; color:var(--ink); text-decoration:none; }
+  #v-comments a.comment-author:hover { text-decoration:underline; }
+</style>
+<!-- 사내 벤더 스크립트 -->
+<script src="/tanoshimi/vendor/sockjs.min.js"></script>
+<script src="/tanoshimi/vendor/stomp.min.js"></script>
+</head>
+<div style="background:#1f2937;color:#fff;font:13px/1.4 sans-serif;padding:6px 12px;text-align:center">정적 데모 화면입니다. 로그인·저장·채팅 등 서버 기능은 동작하지 않습니다.</div>
+<header class="site-header">
+    <div class="hdr">
+
+        <!-- 왼쪽 : 로고 + 주요 메뉴 -->
+        <div class="hdr-left">
+            <a href="/tanoshimi/" class="brand">
+                <span class="brand-mark" aria-hidden="true">楽</span>
+                <span class="brand-word">Tanoshimi</span>
+            </a>
+            <nav class="gnb-main hide-mobile">
+                <a href="/tanoshimi/recommendations">관광지 둘러보기</a>
+                <a href="/tanoshimi/party-board">파티 찾기</a>
+                <a href="/tanoshimi/board">여행 스냅</a>
+                <a href="/tanoshimi/my-parties">내 파티</a>
+            </nav>
+        </div>
+
+        <!-- 오른쪽 : 언어 / 계정 / 알림 / 메뉴 -->
+        <div class="hdr-right">
+
+            <div class="lang-seg hide-mobile">
+                <a href="?lang=ko" class="on">KO</a>
+                <a href="?lang=ja">JP</a>
+            </div>
+
+            
+
+            
+                <!-- 프로필 + 드롭다운 -->
+                <div id="profile-menu-wrap" style="position:relative;">
+                    <div class="profile-btn" id="profile-btn">
+                        
+                        <div class="avatar-txt">유</div>
+                        <span class="profile-name hide-mobile">유자차</span>
+                    </div>
+
+                    <div class="menu-pop" id="profile-dropdown" style="display:none;">
+                        
+                        <a href="/tanoshimi/mypage">마이페이지</a>
+                        <a href="/tanoshimi/mypage/account">계정 관리</a>
+                        <form action="/tanoshimi/logout" method="post">
+                            <button type="submit" class="danger">로그아웃</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 알림 -->
+                <div class="notif-wrap">
+                    <span class="notif-bell" id="top-notif-bell" role="button" aria-label="알림">
+                        🔔
+                        <span class="notif-badge" id="top-notif-badge">0</span>
+                    </span>
+                    <div class="notif-dropdown" id="top-notif-dropdown" style="display:none;">
+                        <div class="notif-dropdown-title">신규 알림</div>
+                        <div class="notif-list" id="top-notif-list">
+                            <p class="notif-empty">새로운 알림이 없습니다.</p>
+                        </div>
+                    </div>
+                </div>
+            
+
+            <button id="sidebar-toggle-btn" class="menu-btn" aria-label="전체 메뉴">☰</button>
+        </div>
+    </div>
+
+    <!-- 임시 비밀번호로 로그인한 경우 강제 비밀번호 변경 모달 (비밀번호 재발급 워크플로우).
+         닫기/취소 버튼이 없다 - 바꾸기 전까지는 어떤 페이지를 가든 다시 뜬다. -->
+    
+     
+    
+
+    <!-- 우측 슬라이드 메뉴 (id 는 아래 스크립트가 잡습니다) -->
+    <div id="right-sidebar" class="side-panel">
+        <div class="side-panel-head">
+            <h2>MENU</h2>
+            <button id="sidebar-close-btn" aria-label="닫기">✕</button>
+        </div>
+        <ul class="side-nav">
+            
+            <li><a href="/tanoshimi/recommendations">⛩️ 관광지 둘러보기</a></li>
+            <li><a href="/tanoshimi/party-board">👫 파티 찾기</a></li>
+            <li><a href="/tanoshimi/board">📸 여행 스냅</a></li>
+            <li><a href="/tanoshimi/my-parties">🧳 내 파티</a></li>
+            <li><a href="/tanoshimi/messages">💬 개인 메시지함</a></li>
+            <li><a href="/tanoshimi/planner">🗾 여행 플래너</a></li>
+        </ul>
+    </div>
+
+    <script>
+        document.getElementById('profile-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = document.getElementById('profile-dropdown');
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        document.getElementById('top-notif-bell')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = document.getElementById('top-notif-dropdown');
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        const sidebar = document.getElementById('right-sidebar');
+        document.getElementById('sidebar-toggle-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.style.right = '0';
+            document.body.classList.add('sidebar-open');
+        });
+        document.getElementById('sidebar-close-btn')?.addEventListener('click', () => {
+            sidebar.style.right = '-320px';
+            document.body.classList.remove('sidebar-open');
+        });
+
+        document.addEventListener('click', (e) => {
+            const dp1 = document.getElementById('profile-dropdown');
+            if(dp1 && !dp1.contains(e.target)) dp1.style.display = 'none';
+
+            const dp2 = document.getElementById('top-notif-dropdown');
+            if(dp2 && !dp2.contains(e.target)) dp2.style.display = 'none';
+
+            if (sidebar && sidebar.style.right === '0px' && !sidebar.contains(e.target)) {
+                sidebar.style.right = '-320px';
+                document.body.classList.remove('sidebar-open');
+            }
+        });
+    </script>
+</header>
+
+<div class="wrap">
+  <!-- 좌측 : 파티 메인 정보 -->
+  <div class="main-col">
+    <!-- 헤더 -->
+    <section class="p-header">
+      <img src="/tanoshimi/assets/places/hokkaido_odori.jpg" class="p-thumb" onerror="this.style.display='none'">
+      <!-- 사진이 없으면 게시판 카드와 같은 팔레트(ph1~ph4) 그라데이션 위에 지역명을 얹는다
+           (예전엔 "기본 테마 이미지"라는 개발용 문구가 그대로 노출됐다). -->
+      
+      
+      <button class="btn-change-thumb" id="btn-change-thumb">📷 대표사진 변경</button>
+      <input type="file" id="thumb-input" style="display:none;" accept="image/*">
+
+      <h1 class="p-title">남자 셋이서 홋카이도 스키+온천 여행 갈 사람</h1>
+      <p class="p-meta">
+        <span class="badge">홋카이도</span>
+        <!-- budgetKrw 는 만원 단위로 저장된다(파티 생성 폼 "1인 예산 (만원)") -->
+        <span>27. 2. 10. 출발 · 4일 · 1인 60만원 내외</span>
+      </p>
+    </section>
+
+    <!-- 멤버 목록 -->
+    <section class="sec">
+      <h2 class="sec-title">파티 멤버 <span style="font-size:14px; color:var(--forest);">1/3명</span></h2>
+      <ul class="ul-users">
+        <li>
+          <!-- 이름·사진을 누르면 공개 프로필(/users/{id})로. username 이 비어 있는 계정(v20 백필 전 DB)도 있어 id 경로를 쓴다. -->
+          <a class="member-link" href="/tanoshimi/users/3" title="유자차 프로필 보기" tabindex="-1" aria-hidden="true">
+            
+            <div class="pf">유</div>
+          </a>
+          <div class="info">
+            <p class="name">
+              <a class="member-link" href="/tanoshimi/users/3" title="유자차 프로필 보기"><span class="member-name">유자차</span></a>
+              <span style="color:var(--sash); font-size:12px; margin-left:4px;">(방장)</span>
+              
+                <span class="title-badge"
+                      title="여행 15회">🧭 탐험가</span>
+              
+            </p>
+          </div>
+          
+        </li>
+      </ul>
+    </section>
+
+    <!-- 신청자 목록 (방장만) -->
+    <section class="sec">
+      <h2 class="sec-title">참가 신청자</h2>
+      <p style="color:#98a1b4;font-size:14px;">대기 중인 신청자가 없습니다.</p>
+      
+    </section>
+
+    <!-- 추억 사진첩 -->
+    <section class="sec">
+      <h2 class="sec-title">추억 사진첩 <button class="btn-write" id="btn-write">+ 사진 올리기</button></h2>
+      <p style="color:#98a1b4;font-size:14px;">아직 공유된 사진이 없습니다.</p>
+      
+    </section>
+
+  </div>
+
+  <!-- 우측 : 채팅 및 투표 -->
+  <div class="side-col">
+    <!-- 시간표 짜기 (계획표) -->
+    <div class="vote-box">
+      <h3>🗓️ 시간표 짜기</h3>
+      <p style="font-size:12px; color:var(--ink-soft); margin:0 0 12px;">여러 명이 동시에 실시간으로 함께 짤 수 있어요. AI 추천도 받아보세요.</p>
+      <a href="/tanoshimi/planner/1" class="btn-write" style="display:block; text-align:center; text-decoration:none; padding:10px;">시간표 열기</a>
+    </div>
+
+    <!-- 일정 픽스 투표 -->
+    <div class="vote-box">
+      <h3>⛳ 일정 픽스 투표</h3>
+      <p style="font-size:12px; color:var(--ink-soft); margin:0;" id="vote-tally">
+         찬성 0 · 반대 0
+      </p>
+      <div class="vote-btns">
+        <button class="btn-agree" id="btn-vote-agree">👍 찬성</button>
+        <button class="btn-disagree" id="btn-vote-disagree">👎 반대</button>
+      </div>
+      <!-- 투표는 의견 모으기용이고 확정은 계획표의 "계획표 제출하기"로 한다 - 예전엔 버튼이
+           "찬성 (일정 확정)"이라 누르면 확정되는 것처럼 보였다. 결과는 계획표 제출 버튼 옆에도 보인다. -->
+      <p style="font-size:12px; color:var(--ink-soft); margin:12px 0 0; line-height:1.5;">의견을 모은 뒤 계획표에서 제출하면 일정이 확정돼요.</p>
+      <a href="/tanoshimi/planner/1" style="display:inline-block; margin-top:6px; font-size:12.5px; font-weight:700; color:var(--forest); text-decoration:none;">계획표에서 확정하기 →</a>
+    </div>
+
+    <!-- 파티 채팅방 -->
+    <div class="chat-box">
+      <div class="chat-head">
+        <span>파티 채팅</span>
+        
+      </div>
+      <div class="chat-msg-area" id="chat-messages">
+        <!-- 메시지들이 여기 렌더링됨 -->
+      </div>
+      <div class="chat-ctrl">
+        <input type="text" id="chat-input" placeholder="메시지를 입력하세요...">
+        <button id="btn-chat-send">전송</button>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+<!-- 사진 상세보기 모달 -->
+<div class="modal-overlay" id="view-modal">
+  <div class="modal-box" style="align-items:center;">
+    <h3 id="v-title" style="align-self:flex-start; margin-bottom: 8px;">제목</h3>
+    <img id="v-img" src="" style="width:100%; max-height:400px; object-fit:contain; border-radius:8px; background:#f2f6fc;">
+    <p id="v-content" style="align-self:flex-start; font-size:14px; line-height:1.6; color:var(--ink); margin-top:12px; width:100%; white-space:pre-wrap; word-break:keep-all;"></p>
+    
+    <!-- 댓글 영역 -->
+    <div style="width:100%; margin-top:20px; border-top:1px solid var(--line); padding-top:16px;">
+      <h4 style="margin:0 0 12px; font-size:15px; color:var(--forest);">댓글</h4>
+      <div id="v-comments" style="max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; margin-bottom:12px; width:100%;">
+        <!-- 댓글 내용 들어가는 곳 -->
+      </div>
+      <div style="display:flex; gap:8px; width:100%;">
+        <input type="text" id="v-comment-input" placeholder="댓글을 달아주세요..." style="flex:1; border:1px solid var(--line); border-radius:8px; padding:8px 12px;">
+        <button id="v-comment-submit" class="btn-write">등록</button>
+      </div>
+    </div>
+
+    <div class="actions" style="justify-content:space-between; width:100%; margin-top:24px;">
+      <a id="v-download" href="" download class="btn-write" style="text-decoration:none; display:inline-block; text-align:center;">📥 다운로드</a>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-modal-x" id="btn-view-edit" style="display:none;">수정</button>
+        <button class="btn-modal-x" id="btn-view-delete" style="display:none; color:var(--danger);">삭제</button>
+        <button class="btn-modal-x" id="btn-view-close">닫기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 사진 올리기 모달 -->
+<div class="modal-overlay" id="write-modal">
+  <div class="modal-box">
+    <h3 id="w-modal-title">사진 공유하기</h3>
+    <input type="text" id="w-title" placeholder="제목을 입력하세요">
+    <textarea id="w-content" placeholder="내용이나 소감을 적어보세요"></textarea>
+    
+    <label style="background:#f2f6fc; border:1px dashed #dfe4ec; padding:20px; text-align:center; border-radius:8px; cursor:pointer;" id="w-file-label">
+      <span id="w-file-text">📷 사진 첨부 (클릭)</span>
+      <input type="file" id="w-file" accept="image/*" style="display:none;">
+    </label>
+    <div id="w-filename" style="font-size:12px; color:var(--forest); font-weight:700; text-align:center;"></div>
+
+    <div class="actions">
+      <button class="btn-modal-x" id="btn-cancel">취소</button>
+      <button class="btn-modal-ok" id="btn-save">올리기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/*<![CDATA[*/
+const ROOM_ID = 2;
+const PARTY_ID = 2;
+const MY_NAME = "\uC720\uC790\uCC28";
+const MY_ID = 3;
+const IS_PARTY_OWNER = true;
+const IS_ADMIN = false;
+const SCHEDULE_ID = 1;
+const INITIAL_CHAT_HISTORY = [];
+/*]]>*/
+
+(function() {
+    const MSG_ERROR = '오류가 발생했습니다.';
+    const docLang = 'ko'; 
+
+    let stompClient = null;
+    let connected = false;
+
+    // [1] 채팅 관리
+    function connect() {
+        if (!ROOM_ID) return;
+        const socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+        stompClient.debug = null; 
+        
+        stompClient.connect({}, function(frame) {
+            connected = true;
+            stompClient.subscribe(`/topic/chat/${ROOM_ID}`, (message) => {
+                try {
+                    const payload = JSON.parse(message.body);
+                    appendMessage(payload);
+                } catch(e) {}
+            });
+        }, function(error) {
+            console.error('Chat Connection Error: ', error);
+        });
+    }
+
+    function appendMessage(msg) {
+        const msgBox = document.getElementById('chat-messages');
+        const isSys = msg.type === 'SYSTEM';
+        const isMe = msg.senderName === MY_NAME;
+        
+        const div = document.createElement('div');
+        div.className = 'msg-row ' + (isSys ? 'sys' : (isMe ? 'me' : 'other'));
+        
+        if (isSys) {
+            const b = document.createElement('div');
+            b.className = 'msg-bubble';
+            b.textContent = msg.content;
+            div.appendChild(b);
+        } else {
+            const senderEl = document.createElement('div');
+            senderEl.className = 'msg-info';
+            senderEl.textContent = msg.senderName;
+            
+            const contEl = document.createElement('div');
+            contEl.className = 'msg-bubble';
+            // 텍스트는 별도 span 에 - contEl.textContent 를 바꾸면 안에 든 버튼까지 지워진다.
+            const textEl = document.createElement('span');
+            textEl.textContent = msg.content;
+            contEl.appendChild(textEl);
+
+            const trBtn = document.createElement('button');
+            trBtn.type = 'button';
+            trBtn.textContent = '번역';
+            trBtn.style.fontSize = '10px';
+            trBtn.style.marginLeft = '6px';
+            trBtn.style.padding = '2px 4px';
+            trBtn.style.border = '1px solid var(--line)';
+            trBtn.style.background = '#f2f6fc';
+            trBtn.style.cursor = 'pointer';
+            
+            // 번역 <-> 원문 토글. 번역 결과는 한 번 받으면 재사용(다시 눌러도 API 재호출 X).
+            let translated = null;
+            trBtn.addEventListener('click', async () => {
+                if (trBtn.textContent === '원문') {
+                    textEl.textContent = msg.content;
+                    trBtn.textContent = '번역';
+                    return;
+                }
+                trBtn.disabled = true;
+                try {
+                    if (translated === null) {
+                        const targetLang = (docLang === 'ja' ? 'JA' : 'KO');
+                        const res = await window.api.post('/api/chat/translate', { text: msg.content, targetLang: targetLang });
+                        if (res.success && res.data) translated = res.data;
+                    }
+                    if (translated !== null) {
+                        textEl.textContent = translated;
+                        trBtn.textContent = '원문';
+                    }
+                } catch(e) {
+                    console.error('번역 실패:', e);
+                } finally {
+                    trBtn.disabled = false;
+                }
+            });
+            contEl.appendChild(trBtn);
+            div.appendChild(senderEl);
+            div.appendChild(contEl);
+        }
+        
+        if (msgBox) {
+            msgBox.appendChild(div);
+            msgBox.scrollTop = msgBox.scrollHeight;
+        }
+    }
+
+    const inp = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('btn-chat-send');
+    if (inp && sendBtn) {
+        function sendChat() {
+            const v = inp.value.trim();
+            if(!v) return;
+            if(!connected || !stompClient) {
+                alert('채팅 서버 접속을 기다려주세요.');
+                return;
+            }
+            stompClient.send(`/app/chat.send/${ROOM_ID}`, {}, JSON.stringify({content: v}));
+            inp.value = '';
+        }
+        sendBtn.addEventListener('click', sendChat);
+        inp.addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+    }
+
+    // 저장된 기록은 소켓 연결과 무관하게 바로 그린다 - 연결이 실패/지연돼도 기존 채팅은 보이게.
+    if (Array.isArray(INITIAL_CHAT_HISTORY)) INITIAL_CHAT_HISTORY.forEach(msg => appendMessage(msg));
+    setTimeout(connect, 300);
+
+    // [2] 신청 관리
+    document.querySelectorAll('.btn-approve').forEach(b => {
+        b.addEventListener('click', async () => {
+            if(!confirm('승인하시겠습니까?')) return;
+            const res = await window.api.post(`/api/parties/${PARTY_ID}/applications/${b.dataset.id}/approve`, {});
+            if(res.success) location.reload();
+            else alert(res.message || MSG_ERROR);
+        });
+    });
+    document.querySelectorAll('.btn-reject').forEach(b => {
+        b.addEventListener('click', async () => {
+            if(!confirm('거절하시겠습니까?')) return;
+            const res = await window.api.post(`/api/parties/${PARTY_ID}/applications/${b.dataset.id}/reject`, {});
+            if(res.success) location.reload();
+            else alert(res.message || MSG_ERROR);
+        });
+    });
+
+    // [3] 파티 나가기
+    document.getElementById('btn-leave')?.addEventListener('click', async () => {
+        if(!confirm('정말 이 파티에서 나가시겠습니까?')) return;
+        const res = await window.api.post(`/api/parties/${PARTY_ID}/leave`, {});
+        alert(res.message);
+        if(res.success) location.href = '/my-parties';
+    });
+    
+    // [4] 대표사진 변경
+    document.getElementById('btn-change-thumb')?.addEventListener('click', () => {
+        document.getElementById('thumb-input').click();
+    });
+    document.getElementById('thumb-input')?.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        const fd = new FormData();
+        fd.append('file', file);
+        let csrfToken = document.querySelector('meta[name="_csrf"]')?.content || '';
+        let csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content || 'X-CSRF-TOKEN';
+        try {
+            const r = await fetch(`/api/parties/${PARTY_ID}/thumbnail`, {
+                method: 'POST',
+                headers: csrfToken ? {[csrfHeader]: csrfToken} : {},
+                body: fd
+            });
+            const res = await r.json();
+            if(res.success) location.reload();
+            else alert(res.message || MSG_ERROR);
+        } catch(err) {
+            alert(MSG_ERROR);
+        }
+    });
+
+  // [5] 사진 올리기 / 수정 (같은 모달을 같이 쓴다 - editingCard 가 있으면 수정 모드)
+  const writeModal = document.getElementById('write-modal');
+  const wFile = document.getElementById('w-file');
+  const wName = document.getElementById('w-filename');
+  let editingCard = null;
+
+  function resetWriteModal() {
+    editingCard = null;
+    document.getElementById('w-modal-title').textContent = '사진 공유하기';
+    document.getElementById('w-file-text').textContent = '📷 사진 첨부 (클릭)';
+    document.getElementById('btn-save').textContent = '올리기';
+    document.getElementById('w-title').value = '';
+    document.getElementById('w-content').value = '';
+    wFile.value = '';
+    wName.textContent = '';
+  }
+
+  // 사진 상세보기에서 "수정"을 누르면 호출된다
+  function openEditModal(card) {
+    resetWriteModal();
+    editingCard = card;
+    document.getElementById('w-modal-title').textContent = '사진 수정하기';
+    document.getElementById('w-file-text').textContent = '📷 사진 바꾸기 (선택 - 안 고르면 그대로)';
+    document.getElementById('btn-save').textContent = '수정하기';
+    document.getElementById('w-title').value = card.getAttribute('data-title') || '';
+    document.getElementById('w-content').value = card.getAttribute('data-content') || '';
+    writeModal.style.display = 'flex';
+  }
+
+  document.getElementById('btn-write')?.addEventListener('click', () => {
+    resetWriteModal();
+    writeModal.style.display = 'flex';
+  });
+  document.getElementById('btn-cancel')?.addEventListener('click', () => {
+    writeModal.style.display = 'none';
+    resetWriteModal();
+  });
+
+  wFile?.addEventListener('change', e => {
+    if (e.target.files.length > 0) {
+      wName.textContent = e.target.files[0].name;
+    }
+  });
+
+  document.getElementById('btn-save')?.addEventListener('click', async () => {
+    const title = document.getElementById('w-title').value.trim();
+    const content = document.getElementById('w-content').value.trim();
+    const file = wFile.files[0];
+
+    if (!title) return alert('제목을 입력하세요');
+    if (!content) return alert('내용을 입력하세요');
+    if (!file && !editingCard) return alert('사진을 꼭 첨부해주세요.');
+
+    let csrfToken = document.querySelector('meta[name="_csrf"]')?.content || '';
+    let csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content || 'X-CSRF-TOKEN';
+    try {
+      // 새 사진을 골랐을 때만 업로드한다 - 수정에서 사진을 안 바꾸면 기존 주소를 그대로 쓴다
+      let thumbnailUrl = editingCard ? editingCard.getAttribute('data-img') : null;
+      if (file) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const uploadRes = await fetch('/api/uploads/image', {
+          method: 'POST',
+          headers: csrfToken ? {[csrfHeader]: csrfToken} : {},
+          body: fd
+        });
+        const uploadJson = await uploadRes.json();
+        if (!uploadJson.success) { alert(uploadJson.message || '사진 업로드에 실패했습니다.'); return; }
+        thumbnailUrl = uploadJson.data;
+      }
+
+      let res;
+      if (editingCard) {
+        res = await window.api.put(`/api/posts/${editingCard.getAttribute('data-id')}`, {
+          title, content, region: editingCard.getAttribute('data-region'), thumbnailUrl, partyId: PARTY_ID
+        });
+      } else {
+        res = await window.api.post('/api/posts', { title, content, region: null, thumbnailUrl, partyId: PARTY_ID });
+      }
+      if (res.success) location.reload();
+      else alert(res.message || MSG_ERROR);
+    } catch(err) {
+      alert(MSG_ERROR);
+    }
+  });
+    
+    // [6] 일정 확정 투표
+    const btnAgree = document.getElementById('btn-vote-agree');
+    const btnDisagree = document.getElementById('btn-vote-disagree');
+    async function vote(type) {
+        const res = await window.api.post(`/api/planner/${SCHEDULE_ID}/vote?type=${type}`, {});
+        if (!res.success) { alert(res.message || MSG_ERROR); return; }
+        const tally = await window.api.get(`/api/planner/${SCHEDULE_ID}/vote/tally`);
+        if (tally.success) {
+            const el = document.getElementById('vote-tally');
+            if (el) el.textContent = `찬성 ${tally.data.agree} · 반대 ${tally.data.disagree}`;
+        }
+    }
+    if (btnAgree) btnAgree.addEventListener('click', () => vote('agree'));
+    if (btnDisagree) btnDisagree.addEventListener('click', () => vote('disagree'));
+
+    // [7] 사진 상세보기 및 댓글 (모달)
+    let currentViewPostId = null;
+    let currentViewCard = null;
+    const vModal = document.getElementById('view-modal');
+
+    // 댓글 작성자 이름·내용은 사용자가 입력한 값이라, HTML 로 해석되지 않게 바꿔서 넣는다 (XSS 방지)
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+    async function loadComments(postId) {
+        const cContainer = document.getElementById('v-comments');
+        if (!cContainer) return;
+        cContainer.innerHTML = '<div style="color:#98a1b4;font-size:13px;">댓글을 불러오는 중...</div>';
+        
+        try {
+            const res = await window.api.get(`/api/posts/${postId}/comments`);
+            if (res.success) {
+                cContainer.innerHTML = '';
+                const comments = res.data;
+                if (comments.length === 0) {
+                    cContainer.innerHTML = '<div style="color:#98a1b4;font-size:13px;text-align:center;">첫 댓글을 작성해보세요!</div>';
+                    return;
+                }
+                
+                const map = {};
+                const roots = [];
+                comments.forEach(c => {
+                    c.children = [];
+                    map[c.id] = c;
+                });
+                comments.forEach(c => {
+                    if (c.parentId) {
+                        if (map[c.parentId]) map[c.parentId].children.push(c);
+                    } else {
+                        roots.push(c);
+                    }
+                });
+                
+                function renderComment(c, depth) {
+                    const ml = depth * 24;
+                    const div = document.createElement('div');
+                    div.style.marginLeft = ml + 'px';
+                    div.style.fontSize = '13px';
+                    div.style.display = 'flex';
+                    div.style.gap = '8px';
+
+                  // 작성자 이름·사진을 누르면 공개 프로필(/users/{id})로 - 파티원 목록과 같은 경로
+                  const profileUrl = `/users/${encodeURIComponent(c.authorId)}`;
+                  const name = escapeHtml(c.authorName || '?');
+                  let avatarHtml = `<div class="pf" style="width:30px;height:30px;border-radius:50%;background:#e7edf8;color:#1b4a9c;display:flex;align-items:center;justify-content:center;font-weight:700;">${escapeHtml((c.authorName || '?')[0])}</div>`;
+                  if (c.authorImage) {
+                    avatarHtml = `<img src="${escapeHtml(c.authorImage)}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;">`;
+                  }
+
+                  div.innerHTML = `
+                      ${depth > 0 ? '<div style="color:#dfe4ec; font-size:18px;">↳</div>' : ''}
+                      <a href="${profileUrl}" title="${name} 프로필 보기" style="flex:none;">${avatarHtml}</a>
+                      <div style="flex:1;">
+                          <div style="display:flex; gap:6px; align-items:center;">
+                              <a href="${profileUrl}" class="comment-author">${name}</a>
+                              <span style="color:#aaa; font-size:11px;">${escapeHtml(c.createdAt)}</span>
+                          </div>
+                          <div style="margin-top:2px; color:var(--ink); line-height:1.4; word-break:break-all;">${escapeHtml(c.content)}</div>
+                          <button class="reply-btn" data-id="${c.id}" style="background:none;border:none;color:var(--forest);font-size:11.5px;padding:0;margin-top:4px;cursor:pointer;font-weight:700;">답글 쓰기</button>
+                      </div>
+                    `;
+                  cContainer.appendChild(div);
+                    
+                    if (c.children.length > 0) {
+                        c.children.forEach(child => renderComment(child, depth + 1));
+                    }
+                }
+                
+                roots.forEach(r => renderComment(r, 0));
+                
+                // 대댓글 버튼 이벤트 연결
+                document.querySelectorAll('.reply-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const cid = e.target.getAttribute('data-id');
+                        const inp = document.getElementById('v-comment-input');
+                        inp.setAttribute('data-parent', cid);
+                        inp.placeholder = '대댓글을 작성 중... (완료 시 등록 버튼 클릭)';
+                        inp.focus();
+                    });
+                });
+            }
+        } catch(e) {
+            cContainer.innerHTML = '<div style="color:var(--danger);font-size:13px;">댓글을 불러오는데 실패했습니다.</div>';
+        }
+    }
+
+    // 사진 주소는 이미지 src 와 다운로드 링크 href 에 들어간다 - javascript: 같은 주소가 섞여 있어도
+    // 실행되지 않게, 같은 출처 경로(/...)나 http(s) 주소만 쓴다(서버 ThumbnailUrlPolicy 와 이중 방어).
+    function safeImageUrl(url) {
+        if (!url) return '';
+        try {
+            const parsed = new URL(url, location.origin);
+            return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed.href : '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    document.querySelectorAll('.photo-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const postId = card.getAttribute('data-id');
+            currentViewPostId = postId;
+          currentViewCard = card;
+
+          // 수정은 올린 사람만, 삭제는 올린 사람·방장·관리자
+          const isAuthor = MY_ID != null && Number(card.getAttribute('data-author-id')) === MY_ID;
+          document.getElementById('btn-view-edit').style.display = isAuthor ? '' : 'none';
+          document.getElementById('btn-view-delete').style.display = (isAuthor || IS_PARTY_OWNER || IS_ADMIN) ? '' : 'none';
+            
+            const title = card.getAttribute('data-title');
+            const img = safeImageUrl(card.getAttribute('data-img'));
+            const content = card.getAttribute('data-content');
+
+            document.getElementById('v-title').textContent = title || '추억 사진';
+            document.getElementById('v-content').textContent = content || '';
+            document.getElementById('v-img').src = img;
+
+          const dlBtn = document.getElementById('v-download');
+          const rawImg = card.getAttribute('data-img') || '';
+          if (rawImg.startsWith('/uploads/')) {
+            // 저장본은 webp 라서, 서버에서 올린 사람의 원래 형식(jpg/png)으로 바꿔 받는다
+            dlBtn.href = '/api/files/download?url=' + encodeURIComponent(rawImg);
+            dlBtn.setAttribute('download', '');   // 파일명은 서버가 정해준다
+          } else {
+            dlBtn.href = img || '#';
+            let filename = img.substring(img.lastIndexOf('/')+1);
+            if(!filename || filename.length < 3) filename = 'photo.jpg';
+            dlBtn.setAttribute('download', filename);
+          }
+
+            vModal.style.display = 'flex';
+            
+            // 댓글 초기화 및 로드
+            const inp = document.getElementById('v-comment-input');
+            if (inp) {
+                inp.removeAttribute('data-parent');
+                inp.placeholder = '댓글을 달아주세요...';
+                inp.value = '';
+            }
+            loadComments(postId);
+        });
+    });
+    
+    document.getElementById('btn-view-close')?.addEventListener('click', () => {
+        vModal.style.display = 'none'; 
+        currentViewPostId = null;
+    });
+
+  // [8] 사진 수정·삭제
+  document.getElementById('btn-view-edit')?.addEventListener('click', () => {
+    if (!currentViewCard) return;
+    vModal.style.display = 'none';
+    openEditModal(currentViewCard);
+  });
+  document.getElementById('btn-view-delete')?.addEventListener('click', async () => {
+    if (!currentViewPostId) return;
+    if (!confirm('이 사진을 삭제할까요? 달린 댓글도 함께 지워집니다.')) return;
+    const res = await window.api.del(`/api/posts/${currentViewPostId}`);
+    if (res.success) location.reload();
+    else alert(res.message || MSG_ERROR);
+  });
+
+    document.querySelectorAll('.modal-overlay').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    });
+
+    document.getElementById('v-comment-submit')?.addEventListener('click', async () => {
+        if (!currentViewPostId) return;
+        const inp = document.getElementById('v-comment-input');
+        const content = inp.value.trim();
+        if(!content) return;
+        
+        const parentId = inp.getAttribute('data-parent');
+        const payload = { content: content };
+        if (parentId) payload.parentId = parseInt(parentId);
+        
+        const res = await window.api.post(`/api/posts/${currentViewPostId}/comments`, payload);
+        if (res.success) {
+            inp.value = '';
+            inp.removeAttribute('data-parent');
+            inp.placeholder = '댓글을 달아주세요...';
+            loadComments(currentViewPostId);
+        } else {
+            alert(res.message || '오류가 발생했습니다.');
+        }
+    });
+
+    // 엔터키를 쳐도 댓글 등록되게 처리
+    document.getElementById('v-comment-input')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            document.getElementById('v-comment-submit').click();
+        }
+    });
+
+})();
+/*]]>*/
+</script>
+</body>
+</html>

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    
+    <title>어디로 떠나볼까요? - Tanoshimi</title>
+    
+    <link rel="icon" type="image/svg+xml" href="/tanoshimi/assets/favicon.svg">
+
+    <link rel="stylesheet" href="/tanoshimi/css/app.css">
+    <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard-dynamic-subset.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&family=Fraunces:opsz,wght,SOFT@9..144,500..700,100&display=swap" rel="stylesheet">
+
+    <!-- CSP 통신(인라인 스크립트 대응)을 위한 함수 구조 -->
+    <script>
+        window.api = {
+            async get(url) {
+                try {
+                    const r = await fetch(url);
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async post(url, data) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = { 'Content-Type': 'application/json' };
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+
+                try {
+                    const r = await fetch(url, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(data)
+                    });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async patch(url, data={}) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = { 'Content-Type': 'application/json' };
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+                try {
+                    const r = await fetch(url, { method: 'PATCH', headers: headers, body: JSON.stringify(data) });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            },
+            async del(url) {
+                const csrfToken = document.querySelector('meta[name="_csrf"]')?.content;
+                const csrfHeader = document.querySelector('meta[name="_csrf_header"]')?.content;
+                const headers = {};
+                if(csrfToken && csrfHeader) headers[csrfHeader] = csrfToken;
+                try {
+                    const r = await fetch(url, { method: 'DELETE', headers: headers });
+                    return await r.json();
+                } catch(e) { return {success:false, message:'Network Error'}; }
+            }
+        };
+    </script>
+    <script src="/tanoshimi/js/report.js" defer></script>
+    <!-- 실시간 알림용 웹소켓 라이브러리 - 외부 CDN 대신 저장소에 둔 사본(static/vendor, CDN 과 같은
+         sockjs-client 1.6.1 / stomp.js 2.3.3)을 쓴다. CDN 이 오염되면 변조된 스크립트가 모든 화면에서
+         실행될 수 있어서(CodeQL js/functionality-from-untrusted-source). -->
+    <script src="/tanoshimi/vendor/sockjs.min.js"></script>
+    <script src="/tanoshimi/vendor/stomp.min.js"></script>
+    <script src="/tanoshimi/js/notifications.js" defer></script>
+<script>window.__STATIC_DEMO__=true;</script></head>
+<!-- =====================================================================
+     메인 페이지 — 「藍 / Indigo Voyage」
+     여기에는 이 페이지에서만 쓰는 배치 규칙만 둡니다. 색·폰트·버튼·카드 같은
+     공통 요소는 전부 /css/app.css 에 있습니다. :root 재선언 금지.
+     ===================================================================== -->
+<style>
+  /* 히어로가 화면 가로를 꽉 채워야 해서 .wrap 바깥에 둔다 */
+  .home-sections{ display:flex; flex-direction:column; gap:66px; }
+
+  /* 관리자 배너 띠 */
+  .ad-band{
+    position:relative; width:100%; aspect-ratio:5/1; overflow:hidden;
+    border-radius:var(--r-lg); background:var(--washi-2); border:1px solid var(--hairline-cool);
+  }
+  @media(max-width:768px){ .ad-band{ aspect-ratio:3/1; } }
+  .banner-slide{ position:absolute; inset:0; opacity:0; transition:opacity .9s ease-in-out; }
+  .banner-slide.active{ opacity:1; z-index:1; }
+  .banner-slide img{ width:100%; height:100%; object-fit:contain; display:block; background:var(--washi-2); }
+  /* 등록된 배너가 없을 때의 기본 배너 - 사진 + 오른쪽 어둠 그라데이션 + HTML 문구.
+     (예전엔 글자까지 그려 넣은 SVG 였는데, <img> 안의 SVG 는 웹폰트를 못 써서 글꼴이 튀었다.)
+     사진(유카타 입은 두 친구)은 두 사람이 왼쪽~가운데(가로 23~52%)에 있고 오른쪽이 어두운
+     인력거라 문구를 오른쪽에 둔다. object-position 세로 20% = 5:1 로 잘려도 머리부터 오비(허리띠)
+     까지 보이게 맞춘 값 - 사진을 바꾸면 이 값과 문구 위치를 같이 다시 맞춰야 한다. */
+  .banner-default{ display:block; color:#fff; background:#08132a; }
+  .banner-default img{ object-fit:cover; object-position:50% 20%; background:#08132a; }
+  .banner-default::after{
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(270deg, rgba(8,19,42,.9) 0%, rgba(8,19,42,.66) 32%, rgba(8,19,42,0) 60%);
+  }
+  .banner-copy{
+    position:absolute; z-index:1; right:clamp(18px,4.5%,56px); top:50%; transform:translateY(-50%);
+    max-width:min(40%,440px); text-align:right;
+  }
+  .banner-copy .hero-eyebrow{ margin-bottom:10px; }
+  .banner-title{
+    margin:0; font-family:var(--font-display); font-weight:700; color:#fff;
+    font-size:clamp(16px,2.3vw,28px); line-height:1.3; letter-spacing:-.02em; word-break:keep-all;
+  }
+  .banner-sub{ margin:8px 0 0; font-size:13.5px; color:rgba(255,255,255,.8); word-break:keep-all; }
+  .banner-more{ display:inline-block; margin-top:12px; font-size:12.5px; font-weight:700; color:var(--gold); }
+  .banner-default:hover .banner-more,
+  .banner-default:focus-visible .banner-more{ text-decoration:underline; }
+  .banner-default:focus-visible{ outline:3px solid var(--gold); outline-offset:-3px; }
+  @media(max-width:768px){
+    .banner-default::after{ background:linear-gradient(270deg, rgba(8,19,42,.92) 0%, rgba(8,19,42,.6) 55%, rgba(8,19,42,.15) 100%); }
+    .banner-copy{ max-width:62%; }
+    .banner-copy .hero-eyebrow, .banner-sub{ display:none; }
+    .banner-more{ margin-top:6px; font-size:11.5px; }
+  }
+  .banner-admin-panel{
+    position:absolute; top:10px; right:10px; z-index:10;
+    display:flex; align-items:center; gap:10px;
+    background:rgba(255,255,255,.94); backdrop-filter:blur(6px);
+    padding:10px 12px; border-radius:var(--r-md); box-shadow:var(--sh-2);
+    font-size:12px;
+  }
+  .banner-admin-panel input[type=text]{ width:130px; padding:6px 8px; font-size:12px; }
+  .banner-admin-panel input[type=file]{ width:150px; font-size:11px; border:none; padding:0; }
+  .banner-delete-btn{
+    position:absolute; top:10px; left:10px; z-index:11;
+    background:var(--shu); color:#fff; border:none; padding:6px 12px;
+    border-radius:var(--r-sm); cursor:pointer; font-weight:700; font-size:12px;
+  }
+
+  /* 섹션 제목 옆 세로 일본어 — 데스크톱에서만 */
+  .sec-wrap{ position:relative; }
+  .sec-wrap > .v-label{ position:absolute; right:-30px; top:64px; }
+  @media(max-width:1340px){ .sec-wrap > .v-label{ display:none; } }
+
+  /* 하단 CTA 띠 */
+  .cta-band{
+    position:relative; overflow:hidden; border-radius:var(--r-xl);
+    min-height:280px; display:flex; align-items:center;
+    padding:48px 44px; background:#08132a;
+  }
+  .cta-band img{
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:0;
+  }
+  .cta-band::after{
+    content:''; position:absolute; inset:0; z-index:1;
+    background:linear-gradient(100deg, rgba(8,19,42,.92) 0%, rgba(8,19,42,.7) 55%, rgba(8,19,42,.3) 100%);
+  }
+  .cta-copy{ position:relative; z-index:2; max-width:46ch; }
+  .cta-copy h2{ color:#fff; margin:0 0 12px; font-size:clamp(22px,2.6vw,30px); }
+  .cta-copy p{ color:rgba(255,255,255,.78); margin:0 0 24px; font-size:14.5px; }
+  @media(max-width:600px){ .cta-band{ padding:34px 24px; min-height:240px; } }
+</style>
+<script src="/tanoshimi/js/main-explore.js?v=1791985340014" defer></script>
+</head>
+<div style="background:#1f2937;color:#fff;font:13px/1.4 sans-serif;padding:6px 12px;text-align:center">정적 데모 화면입니다. 로그인·저장·채팅 등 서버 기능은 동작하지 않습니다.</div>
+<header class="site-header">
+    <div class="hdr">
+
+        <!-- 왼쪽 : 로고 + 주요 메뉴 -->
+        <div class="hdr-left">
+            <a href="/tanoshimi/" class="brand">
+                <span class="brand-mark" aria-hidden="true">楽</span>
+                <span class="brand-word">Tanoshimi</span>
+            </a>
+            <nav class="gnb-main hide-mobile">
+                <a href="/tanoshimi/recommendations">관광지 둘러보기</a>
+                <a href="/tanoshimi/party-board">파티 찾기</a>
+                <a href="/tanoshimi/board">여행 스냅</a>
+                <a href="/tanoshimi/my-parties">내 파티</a>
+            </nav>
+        </div>
+
+        <!-- 오른쪽 : 언어 / 계정 / 알림 / 메뉴 -->
+        <div class="hdr-right">
+
+            <div class="lang-seg hide-mobile">
+                <a href="?lang=ko" class="on">KO</a>
+                <a href="?lang=ja">JP</a>
+            </div>
+
+            
+
+            
+                <!-- 프로필 + 드롭다운 -->
+                <div id="profile-menu-wrap" style="position:relative;">
+                    <div class="profile-btn" id="profile-btn">
+                        
+                        <div class="avatar-txt">유</div>
+                        <span class="profile-name hide-mobile">유자차</span>
+                    </div>
+
+                    <div class="menu-pop" id="profile-dropdown" style="display:none;">
+                        
+                        <a href="/tanoshimi/mypage">마이페이지</a>
+                        <a href="/tanoshimi/mypage/account">계정 관리</a>
+                        <form action="/tanoshimi/logout" method="post">
+                            <button type="submit" class="danger">로그아웃</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 알림 -->
+                <div class="notif-wrap">
+                    <span class="notif-bell" id="top-notif-bell" role="button" aria-label="알림">
+                        🔔
+                        <span class="notif-badge" id="top-notif-badge">0</span>
+                    </span>
+                    <div class="notif-dropdown" id="top-notif-dropdown" style="display:none;">
+                        <div class="notif-dropdown-title">신규 알림</div>
+                        <div class="notif-list" id="top-notif-list">
+                            <p class="notif-empty">새로운 알림이 없습니다.</p>
+                        </div>
+                    </div>
+                </div>
+            
+
+            <button id="sidebar-toggle-btn" class="menu-btn" aria-label="전체 메뉴">☰</button>
+        </div>
+    </div>
+
+    <!-- 임시 비밀번호로 로그인한 경우 강제 비밀번호 변경 모달 (비밀번호 재발급 워크플로우).
+         닫기/취소 버튼이 없다 - 바꾸기 전까지는 어떤 페이지를 가든 다시 뜬다. -->
+    
+     
+    
+
+    <!-- 우측 슬라이드 메뉴 (id 는 아래 스크립트가 잡습니다) -->
+    <div id="right-sidebar" class="side-panel">
+        <div class="side-panel-head">
+            <h2>MENU</h2>
+            <button id="sidebar-close-btn" aria-label="닫기">✕</button>
+        </div>
+        <ul class="side-nav">
+            
+            <li><a href="/tanoshimi/recommendations">⛩️ 관광지 둘러보기</a></li>
+            <li><a href="/tanoshimi/party-board">👫 파티 찾기</a></li>
+            <li><a href="/tanoshimi/board">📸 여행 스냅</a></li>
+            <li><a href="/tanoshimi/my-parties">🧳 내 파티</a></li>
+            <li><a href="/tanoshimi/messages">💬 개인 메시지함</a></li>
+            <li><a href="/tanoshimi/planner">🗾 여행 플래너</a></li>
+        </ul>
+    </div>
+
+    <script>
+        document.getElementById('profile-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = document.getElementById('profile-dropdown');
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        document.getElementById('top-notif-bell')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const el = document.getElementById('top-notif-dropdown');
+            if(el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        const sidebar = document.getElementById('right-sidebar');
+        document.getElementById('sidebar-toggle-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.style.right = '0';
+            document.body.classList.add('sidebar-open');
+        });
+        document.getElementById('sidebar-close-btn')?.addEventListener('click', () => {
+            sidebar.style.right = '-320px';
+            document.body.classList.remove('sidebar-open');
+        });
+
+        document.addEventListener('click', (e) => {
+            const dp1 = document.getElementById('profile-dropdown');
+            if(dp1 && !dp1.contains(e.target)) dp1.style.display = 'none';
+
+            const dp2 = document.getElementById('top-notif-dropdown');
+            if(dp2 && !dp2.contains(e.target)) dp2.style.display = 'none';
+
+            if (sidebar && sidebar.style.right === '0px' && !sidebar.contains(e.target)) {
+                sidebar.style.right = '-320px';
+                document.body.classList.remove('sidebar-open');
+            }
+        });
+    </script>
+</header>
+
+<!-- ===================== 1. 히어로 ===================== -->
+<section class="hero">
+  <div class="hero-media">
+    <img src="/tanoshimi/assets/theme/hero-torii.jpg" alt="해질녘 푸른 하늘 아래 물 위에 선 이쓰쿠시마 신사의 도리이">
+  </div>
+  <div class="hero-inner rise">
+    <span class="hero-eyebrow">Japan &amp; Korea · Travel Companion</span>
+    <h1>같은 날, 같은 도시로.<br>혼자 떠나도 <span class="accent">혼자가 아닌</span> 여행.</h1>
+    <p>출발일이 비슷한 여행자를 찾아 일정을 함께 짜고, 현지에서 만나요.</p>
+    <span class="v-label hero-vertical">旅は道連れ、世は情け</span>
+  </div>
+</section>
+
+<!-- ===================== 2. 검색 (탑승권 모양) ===================== -->
+<div class="search-dock rise rise-1">
+  <form class="ticket" method="get" action="/tanoshimi/party-board">
+    <div class="ticket-form">
+      <div class="tf">
+        <label for="search-region">목적지</label>
+        <select id="search-region" name="region">
+          <option value="">어디든 좋아요</option>
+          <optgroup label="한국">
+            <option value="서울">서울</option>
+            <option value="인천">인천</option>
+            <option value="경기">경기</option>
+            <option value="강원">강원</option>
+            <option value="충북">충북</option>
+            <option value="충남">충남</option>
+            <option value="대전">대전</option>
+            <option value="세종">세종</option>
+            <option value="전북">전북</option>
+            <option value="전남">전남</option>
+            <option value="광주">광주</option>
+            <option value="경북">경북</option>
+            <option value="대구">대구</option>
+            <option value="경남">경남</option>
+            <option value="부산">부산</option>
+            <option value="울산">울산</option>
+            <option value="제주">제주</option>
+          </optgroup><optgroup label="일본">
+            <option value="홋카이도">홋카이도</option>
+            <option value="도호쿠">도호쿠</option>
+            <option value="간토">간토</option>
+            <option value="주부">주부</option>
+            <option value="간사이">간사이</option>
+            <option value="주고쿠">주고쿠</option>
+            <option value="시코쿠">시코쿠</option>
+            <option value="규슈">규슈</option>
+            <option value="오키나와">오키나와</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="tf" style="flex:1.7;">
+        <label for="search-input">키워드</label>
+        <input type="text" id="search-input" name="q" placeholder="오사카 먹방, 홋카이도 힐링…">
+      </div>
+      <div class="tf">
+        <label for="search-gender">동행 조건</label>
+        <select id="search-gender" name="gender">
+          <option value="">누구나</option>
+          <option value="female_only">여성만</option>
+          <option value="male_only">남성만</option>
+        </select>
+      </div>
+      <div class="tf-go">
+        <button type="submit" class="btn btn-primary">파티 찾기</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="quick-row">
+    <span class="quick-label">인기 검색</span>
+    <a href="/tanoshimi/party-board?q=%EB%A8%B9%EB%B0%A9">🍜 먹방 투어</a>
+    <a href="/tanoshimi/party-board?q=%EC%98%A8%EC%B2%9C">♨️ 온천</a>
+    <a href="/tanoshimi/party-board?q=%EC%B6%95%EC%A0%9C">🎆 여름 축제</a>
+    <a href="/tanoshimi/party-board?q=%EC%8A%A4%ED%82%A4">🎿 스키</a>
+    <a href="/tanoshimi/party-board?q=%EC%82%AC%EC%A7%84">📷 사진 여행</a>
+  </div>
+</div>
+
+<main class="wrap">
+ <div class="home-sections">
+
+  <!-- ===================== 3. 인기 지역 ===================== -->
+  <section class="sec-wrap">
+    <span class="v-label">人気エリア</span>
+    <div class="sec-head">
+      <div>
+        <span class="sec-idx">01 — DESTINATIONS</span>
+        <h2>이번 주 사람들이 모이는 곳</h2>
+        <p class="sec-sub">지역을 누르면 그 지역에서 모집 중인 파티만 모아 볼 수 있어요.</p>
+      </div>
+      <a class="more-link" href="/tanoshimi/party-board">전체 지역</a>
+    </div>
+
+    <div class="dest-grid">
+      <a class="dest" href="/tanoshimi/party-board?region=%ED%99%8B%EC%B9%B4%EC%9D%B4%EB%8F%84">
+        <img src="/tanoshimi/assets/theme/dest-hokkaido.jpg" alt="밤의 오타루 운하" loading="lazy">
+        <div class="scrim"></div>
+        <div class="dest-cap"><span class="jp">北海道</span><span class="ko">홋카이도</span></div>
+      </a>
+      <a class="dest" href="/tanoshimi/party-board?region=%EA%B0%84%ED%86%A0">
+        <img src="/tanoshimi/assets/theme/dest-tokyo.jpg" alt="해질녘 시부야 거리" loading="lazy">
+        <div class="scrim"></div>
+        <div class="dest-cap"><span class="jp">関東</span><span class="ko">도쿄 · 간토</span></div>
+      </a>
+      <a class="dest" href="/tanoshimi/party-board?region=%EC%98%A4%EC%82%AC%EC%B9%B4">
+        <img src="/tanoshimi/assets/places/osaka_dotonbori.jpg" alt="밤의 오사카 도톤보리" loading="lazy">
+        <div class="scrim"></div>
+        <div class="dest-cap"><span class="jp">大阪</span><span class="ko">오사카</span></div>
+      </a>
+      <a class="dest" href="/tanoshimi/party-board?region=%EA%B0%84%EC%82%AC%EC%9D%B4">
+        <img src="/tanoshimi/assets/theme/dest-kyoto.jpg" alt="이른 아침의 교토 야사카 거리" loading="lazy">
+        <div class="scrim"></div>
+        <div class="dest-cap"><span class="jp">関西</span><span class="ko">교토 · 간사이</span></div>
+      </a>
+      <a class="dest" href="/tanoshimi/party-board?region=%EA%B7%9C%EC%8A%88">
+        <img src="/tanoshimi/assets/theme/dest-fukuoka.jpg" alt="후쿠오카 나카스의 포장마차" loading="lazy">
+        <div class="scrim"></div>
+        <div class="dest-cap"><span class="jp">九州</span><span class="ko">후쿠오카 · 규슈</span></div>
+      </a>
+      <a class="dest" href="/tanoshimi/party-board?region=%EC%98%A4%ED%82%A4%EB%82%98%EC%99%80">
+        <img src="/tanoshimi/assets/theme/dest-okinawa.jpg" alt="오키나와 게라마 제도의 바다" loading="lazy">
+        <div class="scrim"></div>
+        <div class="dest-cap"><span class="jp">沖縄</span><span class="ko">오키나와</span></div>
+      </a>
+    </div>
+  </section>
+
+  <!-- ===================== 4. 광고 배너 (관리자 등록) ===================== -->
+  <section class="ad-band">
+    <div id="banner-slider">
+      <!-- 사진: Pexels, Satoshi Hirayama - 교토 거리를 유카타 입고 나란히 걷는 두 친구 (assets/theme/CREDITS.txt) -->
+      <a class="banner-slide active banner-default"
+         href="/tanoshimi/party-board">
+        <img src="/tanoshimi/assets/theme/band-yukata-kyoto.jpg" alt="" loading="lazy">
+        <div class="banner-copy">
+          <span class="hero-eyebrow">Tanoshimi</span>
+          <p class="banner-title">일본 여행,<br>같이 가면 더 즐거우니까</p>
+          <p class="banner-sub">파티를 만들고 여행 메이트와 함께 일정을 짜 보세요</p>
+          <span class="banner-more">함께 갈 파티 찾기 →</span>
+        </div>
+      </a>
+      
+    </div>
+
+    
+  </section>
+
+  <!-- ===================== 5. 임박 파티 | 인기 스냅 ===================== -->
+  <div class="home-split">
+
+    <!-- 5-1. 모집 마감 임박 파티 -->
+    <section class="split-col">
+      <div class="sec-head">
+        <div>
+          <span class="sec-idx">02 — CLOSING SOON</span>
+          <h2>마감이 가까운 파티</h2>
+          <p class="sec-sub">일주일 안에 출발해요</p>
+        </div>
+      </div>
+      <div class="tag-scroll" id="tag-row"></div>
+      <div class="party-list" id="hot-party-grid"></div>
+      <p id="hot-party-empty" class="col-empty" style="display:none;"></p>
+      <a class="more-link" style="align-self:flex-end;" href="/tanoshimi/party-board">파티 더보기</a>
+    </section>
+
+    <!-- 5-2. 인기 스냅 -->
+    <section class="split-col">
+      <div class="sec-head">
+        <div>
+          <span class="sec-idx">03 — SNAPS</span>
+          <h2>여행자들의 스냅</h2>
+          <p class="sec-sub">가장 많이 저장된 사진</p>
+        </div>
+        <select id="snap-region-select" style="max-width:170px;">
+          <option value="">전체 지역</option>
+          <optgroup label="한국">
+            <option value="서울">서울</option>
+            <option value="인천">인천</option>
+            <option value="경기">경기</option>
+            <option value="강원">강원</option>
+            <option value="충북">충북</option>
+            <option value="충남">충남</option>
+            <option value="대전">대전</option>
+            <option value="세종">세종</option>
+            <option value="전북">전북</option>
+            <option value="전남">전남</option>
+            <option value="광주">광주</option>
+            <option value="경북">경북</option>
+            <option value="대구">대구</option>
+            <option value="경남">경남</option>
+            <option value="부산">부산</option>
+            <option value="울산">울산</option>
+            <option value="제주">제주</option>
+          </optgroup><optgroup label="일본">
+            <option value="홋카이도">홋카이도</option>
+            <option value="도호쿠">도호쿠</option>
+            <option value="간토">간토</option>
+            <option value="주부">주부</option>
+            <option value="간사이">간사이</option>
+            <option value="주고쿠">주고쿠</option>
+            <option value="시코쿠">시코쿠</option>
+            <option value="규슈">규슈</option>
+            <option value="오키나와">오키나와</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="snap-grid" id="snap-grid"></div>
+      <p id="snap-empty" class="col-empty" style="display:none;">
+        
+        <span>아직 등록된 스냅이 없습니다.</span>
+      </p>
+      <a class="more-link" style="align-self:flex-end;"
+         href="/tanoshimi/board">스냅 더보기</a>
+    </section>
+
+  </div>
+
+  <!-- ===================== 6. 파티 개설 CTA ===================== -->
+  <section class="cta-band">
+    <img src="/tanoshimi/assets/theme/band-tokyo.jpg" alt="해질녘 도쿄 도심의 야경" loading="lazy">
+    <div class="cta-copy">
+      <span class="hero-eyebrow">Make your own</span>
+      <h2>마음에 드는 파티가 없다면,<br>직접 열어도 됩니다.</h2>
+      <p>날짜와 도시, 함께하고 싶은 사람의 조건만 적어두면 나머지는 타노시미가 찾아드려요.</p>
+      <a class="btn btn-accent btn-lg" href="/tanoshimi/party-board/create">파티 만들기</a>
+    </div>
+  </section>
+
+ </div>
+</main>
+
+<footer class="site-footer">
+    <div class="seigaiha" style="--wave:rgba(143,178,230,.13); position:absolute; inset:0; opacity:.7; pointer-events:none;"></div>
+
+    <div class="footer-inner">
+        <div class="footer-brand">
+            <span class="brand" style="color:#fff;">
+                <span class="brand-mark" aria-hidden="true">楽</span>
+                <span class="brand-word">Tanoshimi</span>
+            </span>
+            <p>혼자여도 괜찮고, 같이면 더 좋은 여행.<br>타노시미는 같은 날 같은 도시로 떠나는 사람들을 이어줍니다.</p>
+        </div>
+
+        <nav class="footer-nav">
+            <div class="footer-col">
+                <h4>둘러보기</h4>
+                <a href="/tanoshimi/party-board">파티 찾기</a>
+                <a href="/tanoshimi/recommendations">관광지 둘러보기</a>
+                <a href="/tanoshimi/board">여행 스냅</a>
+                <a href="/tanoshimi/planner">여행 플래너</a>
+            </div>
+            <div class="footer-col">
+                <h4>내 계정</h4>
+                <a href="/tanoshimi/mypage">마이페이지</a>
+                <a href="/tanoshimi/my-parties">내 파티</a>
+                <a href="/tanoshimi/messages">메시지함</a>
+            </div>
+            <div class="footer-col">
+                <h4>고객지원</h4>
+                <a href="/tanoshimi/support/write">문의하기</a>
+                <a href="/tanoshimi/support">문의 내역</a>
+            </div>
+        </nav>
+    </div>
+
+    <div class="footer-base">
+        <span>© 2026 Tanoshimi. 팀 프로젝트용 데모 서비스입니다.</span>
+        <span>사진 : Wikimedia Commons (CC BY-SA) · 자세한 출처는 /assets/theme/CREDITS.txt</span>
+    </div>
+</footer>
+
+<script>
+/*<![CDATA[*/
+// "마감이 가까운 파티" 그리드 재료 (PartyCardView 리스트) - main-explore.js 의 renderHotPartyGrid 가 읽는다.
+const HOT_PARTIES = [];
+// "여행자들의 스냅" 그리드 재료 (SnapCardView 리스트) - main-explore.js 의 renderSnapGrid 가 읽는다.
+const POPULAR_SNAPS = [{"id":50,"title":"\uD55C\uAC15 \uC57C\uACBD","region":"\uC11C\uC6B8","thumbnailUrl":"\/uploads\/demo_capital_lotte_tower.jpg","likeCount":0,"authorName":"\uC720\uC790\uCC28"},{"id":73,"title":"\uD574\uC6B4\uB300 \uC2A4\uB0C5","region":"\uBD80\uC0B0","thumbnailUrl":"\/uploads\/demo_gyeongnam_haeundae.jpg","likeCount":0,"authorName":"\uC720\uC790\uCC28"},{"id":72,"title":"\uB3C4\uD1A4\uBCF4\uB9AC \uC2A4\uB0C5","region":"\uC624\uC0AC\uCE74","thumbnailUrl":"\/uploads\/demo_osaka_dotonbori.jpg","likeCount":0,"authorName":"\uC720\uC790\uCC28"},{"id":71,"title":"\uC624\uC0AC\uCE74\uC131 \uC2A4\uB0C5","region":"\uC624\uC0AC\uCE74","thumbnailUrl":"\/uploads\/demo_osaka_castle.jpg","likeCount":0,"authorName":"\uC720\uC790\uCC28"},{"id":51,"title":"\uBD81\uCD0C \uD55C\uC625\uB9C8\uC744","region":"\uC11C\uC6B8","thumbnailUrl":"\/uploads\/demo_capital_bukchon.jpg","likeCount":0,"authorName":"\uC720\uC790\uCC28"},{"id":74,"title":"\uC11C\uC6B8 \uC2A4\uB0C5","region":"\uC11C\uC6B8","thumbnailUrl":"\/uploads\/demo_capital_gyeongbokgung.jpg","likeCount":0,"authorName":"\uC720\uC790\uCC28"},{"id":52,"title":"\uB0A8\uC0B0\uD0C0\uC6CC","region":"\uC11C\uC6B8","thumbnailUrl":"\/uploads\/demo_capital_nseoul.jpg","likeCount":0,"authorName":"\uC720\uC790\uCC28"},{"id":75,"title":"\uC11C\uC6B8 \uC2A4\uB0C5","region":"\uC11C\uC6B8","thumbnailUrl":"\/uploads\/demo_capital_cheonggyecheon.jpg","likeCount":0,"authorName":"\uC720\uC790\uCC28"},{"id":53,"title":"\uAC10\uCC9C\uBB38\uD654\uB9C8\uC744","region":"\uBD80\uC0B0","thumbnailUrl":"\/uploads\/demo_gyeongnam_gamcheon.jpg","likeCount":0,"authorName":"\uC720\uC790\uCC28"}];
+/*]]>*/
+
+// 지역별 인기 스냅 - 드롭다운을 바꾸면 그 지역으로 새로고침(서버가 필터링해 다시 내려준다).
+document.getElementById('snap-region-select')?.addEventListener('change', (e) => {
+    window.location.href = e.target.value ? ('/?region=' + encodeURIComponent(e.target.value)) : '/';
+});
+
+// 관리자 배너 자동 슬라이드
+document.addEventListener('DOMContentLoaded', () => {
+    const slides = document.querySelectorAll('.banner-slide');
+    if (slides.length <= 1) return;
+    let i = 0;
+    setInterval(() => {
+        slides[i].classList.remove('active');
+        i = (i + 1) % slides.length;
+        slides[i].classList.add('active');
+    }, 5000);
+});
+</script>
+</body>
+</html>

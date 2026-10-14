@@ -1,0 +1,758 @@
+
+    function showEditModal(initialTitle, initialMemo, initialColor, callback) {
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0'; overlay.style.left = '0';
+        overlay.style.width = '100vw'; overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.zIndex = '99999';
+        
+        const modal = document.createElement('div');
+        modal.style.background = '#fff';
+        modal.style.padding = '24px';
+        modal.style.borderRadius = '12px';
+        modal.style.width = '320px';
+        modal.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
+        
+        const titleEl = document.createElement('h3');
+        titleEl.textContent = '일정 정보 입력';
+        titleEl.style.marginTop = '0';
+        titleEl.style.marginBottom = '16px';
+        
+        const tLabel = document.createElement('label');
+        tLabel.textContent = '제목';
+        tLabel.style.display = 'block'; tLabel.style.fontSize = '12px';
+        const tInput = document.createElement('input');
+        tInput.type = 'text'; tInput.value = initialTitle || '';
+        tInput.style.width = '100%'; tInput.style.marginBottom = '12px';
+        tInput.style.padding = '8px'; tInput.style.boxSizing = 'border-box';
+        
+        const mLabel = document.createElement('label');
+        mLabel.textContent = '내용 (메모)';
+        mLabel.style.display = 'block'; mLabel.style.fontSize = '12px';
+        const mInput = document.createElement('textarea');
+        mInput.value = initialMemo || '';
+        mInput.style.width = '100%'; mInput.style.marginBottom = '12px';
+        mInput.style.height = '60px';
+        mInput.style.padding = '8px'; mInput.style.boxSizing = 'border-box';
+        
+        const cLabel = document.createElement('label');
+        cLabel.textContent = '글자색';
+        cLabel.style.display = 'block'; cLabel.style.fontSize = '12px';
+        const cInput = document.createElement('input');
+        cInput.type = 'color'; cInput.value = initialColor || '#4b6b4a';
+        cInput.style.width = '100%'; cInput.style.marginBottom = '20px';
+        cInput.style.height = '36px';
+        
+        const btnDiv = document.createElement('div');
+        btnDiv.style.display = 'flex'; btnDiv.style.justifyContent = 'flex-end'; btnDiv.style.gap = '8px';
+        
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = '취소';
+        cancelBtn.style.padding = '6px 12px';
+        cancelBtn.onclick = () => document.body.removeChild(overlay);
+        
+        const okBtn = document.createElement('button');
+        okBtn.textContent = '확인';
+        okBtn.style.padding = '6px 12px';
+        okBtn.style.background = 'var(--forest)';
+        okBtn.style.color = '#fff';
+        okBtn.style.border = 'none';
+        okBtn.style.borderRadius = '4px';
+        okBtn.onclick = () => {
+            document.body.removeChild(overlay);
+            callback(tInput.value.trim(), mInput.value.trim(), cInput.value);
+        };
+        
+        btnDiv.appendChild(cancelBtn);
+        btnDiv.appendChild(okBtn);
+        
+        modal.appendChild(titleEl);
+        modal.appendChild(tLabel);
+        modal.appendChild(tInput);
+        modal.appendChild(mLabel);
+        modal.appendChild(mInput);
+        modal.appendChild(cLabel);
+        modal.appendChild(cInput);
+        modal.appendChild(btnDiv);
+        
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+    }
+(function () {
+    const SLOT_MIN = 30;         // 30 min slots
+    const SLOT_H = 50;           // px per slot
+
+    // DAYS and SLOTS depend on schedule
+    const START_HOUR = 6;
+    const END_HOUR = 24;
+    const SLOTS = (END_HOUR - START_HOUR) * (60 / SLOT_MIN);
+    let DAY_COUNT = typeof SCHEDULE_DAYS !== 'undefined' ? SCHEDULE_DAYS : (typeof DURATION_NIGHTS !== 'undefined' ? DURATION_NIGHTS + 1 : 4);
+
+
+        let DAYS = [];
+    function buildDays() {
+        DAYS = Array.from({length: Math.max(DAY_COUNT, 1)}, (_, i) => ({
+            key: 'd' + (i + 1),
+            date: (i + 1) + '일차',
+            week: ''
+        }));
+    }
+    buildDays();
+
+    let items = [];
+
+    function slotToTime(slot) {
+        const total = START_HOUR * 60 + slot * SLOT_MIN;
+        const h = Math.floor(total / 60);
+        const m = total % 60;
+        const tStr = `${h}:${m.toString().padStart(2, '0')}`;
+        return m === 0 ? `<strong>${tStr}</strong>` : `<span style="font-weight:normal;opacity:0.8;">${tStr}</span>`;
+    }
+
+    const gridHead = document.getElementById('grid-head');
+    const gridBody = document.getElementById('grid-body');
+
+    function buildGrid() {
+        if (!gridHead || !gridBody) return;
+        
+        // head
+        gridHead.innerHTML = '<div class="corner"></div>' + DAYS.map(d => `
+          <div class="day-head">
+            <div class="d">${d.date}</div>
+            <div class="w">${d.week}</div>
+            <button class="add" data-day="${d.key}">+ 추가</button>
+            <button class="opt-route" data-day="${d.key}">🧭 동선</button>
+          </div>`).join('');
+
+        gridHead.querySelectorAll('.add').forEach(btn => {
+            if (typeof IS_LOCK_HOLDER !== 'undefined' && !IS_LOCK_HOLDER) {
+                btn.title = '편집권이 있는 사람만 추가할 수 있어요';
+            }
+            btn.addEventListener('click', async () => {
+                if (!canEditNow()) return;
+                await addBlank(btn.dataset.day);
+            });
+        });
+
+        gridHead.querySelectorAll('.opt-route').forEach(btn =>
+          btn.addEventListener('click', async () => {
+              if (typeof IS_LOCK_HOLDER !== 'undefined' && !IS_LOCK_HOLDER) {
+                  alert('편집권이 있어야 동선을 최적화할 수 있어요.');
+                  return;
+              }
+              const day = parseInt(btn.dataset.day.replace('d', ''), 10) || 1;
+              if (!confirm(`${day}일차 일정을 좌표 기준으로 재배치할까요? AI 크레딧이 1회 차감됩니다.`)) return;
+              btn.disabled = true;
+              try {
+                  const result = await window.api.post(`/api/planner/${SCHEDULE_ID}/optimize-route?dayIndex=${day}`, {});
+                  if (result.success) {
+                      alert(result.message);
+                      await reload();
+                  } else {
+                      alert(result.message || '동선 최적화에 실패했습니다.');
+                  }
+              } finally {
+                  btn.disabled = false;
+              }
+          })
+        );
+        
+        // Set CSS grid dynamically
+        gridHead.style.display = 'grid';
+        gridHead.style.gridTemplateColumns = `56px repeat(${DAY_COUNT}, minmax(140px, 1fr))`;
+        gridBody.style.display = 'grid';
+        gridBody.style.gridTemplateColumns = `56px repeat(${DAY_COUNT}, minmax(140px, 1fr))`;
+
+        // body
+        let bodyHtml = '<div class="time-col" style="min-width: 56px;">';
+        for(let i=0; i<SLOTS; i++) {
+            bodyHtml += `<div class="slot">${slotToTime(i)}</div>`;
+        }
+        bodyHtml += '</div>';
+
+        DAYS.forEach(d => {
+            bodyHtml += `<div class="col" data-day="${d.key}">`;
+            for(let i=0; i<SLOTS; i++) {
+                bodyHtml += `<div class="cell"></div>`;
+            }
+            bodyHtml += `</div>`;
+        });
+        gridBody.innerHTML = bodyHtml;
+
+        gridBody.querySelectorAll('.col').forEach(col => {
+            col.addEventListener('dragover', e => e.preventDefault());
+            col.addEventListener('drop', onDropToColumn);
+        });
+        
+        // Sync top scrollbar dummy width
+        const mainScroll = document.getElementById('main-scroll-wrapper');
+        const topDummy = document.getElementById('top-scroll-dummy');
+        if (mainScroll && topDummy) {
+            // Need setTimeout because DOM rendering of new grid columns takes a tick
+            setTimeout(() => {
+                topDummy.style.width = mainScroll.firstElementChild.scrollWidth + 'px';
+            }, 0);
+        }
+    }
+    
+    // Add scroll sync event listeners
+    document.addEventListener('DOMContentLoaded', () => {
+        const topScroll = document.getElementById('top-scroll-wrapper');
+        const mainScroll = document.getElementById('main-scroll-wrapper');
+        
+        if (topScroll && mainScroll) {
+            let isSyncingLeftScroll = false;
+            let isSyncingRightScroll = false;
+            
+            topScroll.addEventListener('scroll', function(e) {
+                if (!isSyncingLeftScroll) {
+                    isSyncingRightScroll = true;
+                    mainScroll.scrollLeft = this.scrollLeft;
+                }
+                isSyncingLeftScroll = false;
+            });
+            
+            mainScroll.addEventListener('scroll', function(e) {
+                if (!isSyncingRightScroll) {
+                    isSyncingLeftScroll = true;
+                    topScroll.scrollLeft = this.scrollLeft;
+                }
+                isSyncingRightScroll = false;
+            });
+        }
+    });
+
+    /* ---------------------------------------------------------------------
+       렌더링
+       --------------------------------------------------------------------- */
+    function render() {
+        document.querySelectorAll('.col').forEach(col => {
+            col.querySelectorAll('.block').forEach(el => el.remove());
+        });
+
+        let totalKrw = 0, totalJpy = 0;
+        items.forEach(item => {
+            const startSlot = (item.startMinute - START_HOUR * 60) / SLOT_MIN;
+            const lenSlot = item.durationMinute / SLOT_MIN;
+            if (startSlot < 0 || startSlot >= SLOTS) return; // 화면 밖
+
+            const dtKey = "d" + item.dayIndex;
+            const col = document.querySelector(`.col[data-day="${dtKey}"]`);
+            if (!col) return;
+
+            const el = document.createElement('div');
+            el.className = 'block';
+            el.dataset.id = item.id;
+            // 편집권이 없으면(IS_LOCK_HOLDER=false) 아무 블록도 드래그할 수 없다 - 전원 읽기전용 원칙.
+            el.draggable = item.source !== 'package_default' && (typeof IS_LOCK_HOLDER === 'undefined' || IS_LOCK_HOLDER);
+            el.style.top = (startSlot * SLOT_H + 1) + 'px';
+            el.style.height = (lenSlot * SLOT_H - 3) + 'px';
+
+            if (item.source === 'package_default') {
+                el.classList.add('pkg');
+            } else if (item.source === 'custom') {
+                el.classList.add('blank');
+            } else {
+                el.classList.add('act');
+            }
+
+            // [TNSM-70] del/grip 은 드래그(draggable, 위)·더블클릭 수정(아래)과 달리 편집권
+            // 보유 여부를 안 가려서, 편집권 없는 파티원 눈에도 X/리사이즈 손잡이가 눌리는
+            // 것처럼 보였다 - 눌러도 서버가 LOCK_NOT_HELD 로 막긴 하지만(TNSM-21에서 확인한
+            // assertCanEdit), 왜 안 되는지 이유도 안 보여주고 눌러지는 것처럼 보이는 것 자체가
+            // 버그다. 같은 조건으로 통일한다.
+            const canEdit = item.source !== 'package_default' && (typeof IS_LOCK_HOLDER === 'undefined' || IS_LOCK_HOLDER);
+            let memoHtml = item.memo ? `<div class="m" style="font-size:10px; opacity:0.85; margin-top:1px; line-height:1.2; word-break:keep-all;">${escapeHtml(item.memo)}</div>` : '';
+            el.innerHTML = `
+              <div class="t" style="color: ${item.color || 'var(--custom-text-color, #4b6b4a)'}; font-weight: 700;">${escapeHtml(item.title)}</div>
+              ${memoHtml}
+              <div class="bg"></div>
+              ${canEdit ? '<div class="del">X</div>' : ''}
+              ${canEdit ? '<div class="grip"></div>' : ''}
+            `;
+            col.appendChild(el);
+
+            totalKrw += item.priceKrw || 0;
+            totalJpy += item.priceJpy || 0;
+
+            if (item.source !== 'package_default') {
+                el.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', JSON.stringify({id: item.id}));
+                });
+            }
+            if (canEdit) {
+                const delBtn = el.querySelector('.del');
+                if (delBtn) delBtn.addEventListener('click', () => removeBlock(item));
+
+                const grip = el.querySelector('.grip');
+                if (grip) grip.addEventListener('pointerdown', (e) => startResize(e, item, el, startSlot, lenSlot));
+            }
+            
+            // Allow edit for blocks
+            if (item.source !== 'package_default' && (typeof IS_LOCK_HOLDER === 'undefined' || IS_LOCK_HOLDER)) {
+                el.addEventListener('dblclick', async (e) => {
+                    e.stopPropagation();
+                    showEditModal(item.title, item.memo, item.color || '#4b6b4a', async (newTitle, newMemo, newColor) => {
+                        if (newTitle !== '') {
+                            // [TNSM-70] window.api.delete 는 존재하지 않는 메서드(csrf.js 는 del 만
+                            // 정의)라 항상 TypeError 로 죽어서 더블클릭 수정이 완전히 먹통이었다.
+                            // 삭제가 실패하면(예: 그 사이 편집권을 잃음) 새 항목을 만들지 않고
+                            // 여기서 멈춘다 - 안 그러면 원본은 지워졌는데 새 항목은 안 생기는
+                            // 데이터 유실이 생긴다.
+                            const delRes = await window.api.del(`/api/planner/items/${item.id}`);
+                            if (delRes && !delRes.success) {
+                                alert(delRes.message || '수정에 실패했어요.');
+                                return;
+                            }
+                            const addRes = await window.api.post(`/api/planner/${SCHEDULE_ID}/items`, {
+                                dayIndex: item.dayIndex,
+                                startMinute: item.startMinute,
+                                durationMinute: item.durationMinute,
+                                activityId: null,
+                                title: newTitle,
+                                memo: newMemo,
+                                color: newColor
+                            });
+                            if (addRes && !addRes.success && addRes.message) alert(addRes.message);
+                            reload();
+                        }
+                    });
+                });
+            }
+        });
+
+        const totalEl = document.getElementById('total-cost');
+        if (totalEl) {
+            totalEl.textContent = `합계: \\${totalKrw.toLocaleString()} / ¥${totalJpy.toLocaleString()}`;
+        }
+    }
+
+    async function removeBlock(item) {
+        if (!confirm('삭제하시겠습니까?')) return;
+        // [TNSM-70] 실패(예: 편집권을 잃은 사이 삭제 시도)해도 응답을 확인하지 않아 아무 표시
+        // 없이 그냥 남아있기만 했다 - startResize 의 up() 처럼 실패 메시지를 보여준다.
+        const res = await window.api.del(`/api/planner/items/${item.id}`);
+        if (res && !res.success && res.message) alert(res.message);
+        await reload();
+    }
+
+    /* ---------------------------------------------------------------------
+       크기 조절 및 드래그 앤 드롭
+       --------------------------------------------------------------------- */
+    function startResize(e, item, el, startSlot, startLen) {
+        e.preventDefault(); e.stopPropagation();
+        el.draggable = false;
+        const startY = e.clientY;
+        el.setPointerCapture(e.pointerId);
+
+        let finalLenMin = item.durationMinute;
+
+        function move(ev) {
+            const delta = Math.round((ev.clientY - startY) / SLOT_H);
+            const rawLen = startLen + delta;
+            const newLenMin = Math.max(1, rawLen) * SLOT_MIN;
+            finalLenMin = newLenMin;
+            el.style.height = (Math.max(1, rawLen) * SLOT_H - 3) + 'px';
+        }
+        function up() {
+            el.removeEventListener('pointermove', move);
+            el.removeEventListener('pointerup', up);
+            el.draggable = true;
+            window.api.patch(`/api/planner/items/${item.id}?startMinute=${item.startMinute}&durationMinute=${finalLenMin}`)
+                .then(res => {
+                    if (!res.success && res.message) alert(res.message);
+                    reload();
+                });
+        }
+        el.addEventListener('pointermove', move);
+        el.addEventListener('pointerup', up);
+    }
+
+    async function onDropToColumn(e) {
+        e.preventDefault();
+        const col = e.currentTarget;
+        col.classList.remove('over');
+        const day = parseInt(col.dataset.day.replace('d', ''), 10);
+        
+        let data;
+        try { data = JSON.parse(e.dataTransfer.getData('text/plain')); } catch(_) { return; }
+        
+        const rawSlot = Math.round((e.clientY - col.getBoundingClientRect().top) / SLOT_H);
+        const startMinute = START_HOUR * 60 + Math.max(0, rawSlot) * SLOT_MIN;
+
+        if (data.kind === 'recommend' || data.kind === 'custom') {
+            if (!(await confirmWeatherOk({ activityId: data.activityId, latitude: data.latitude, longitude: data.longitude, venueType: data.venueType }, day))) return;
+            const parsedDuration = parseInt(data.durationMin, 10);
+            const finalDuration = (!isNaN(parsedDuration) && parsedDuration > 0) ? parsedDuration : 60;
+            const res = await window.api.post(`/api/planner/${SCHEDULE_ID}/items`, {
+                dayIndex: day, startMinute, durationMinute: finalDuration,
+                activityId: data.activityId || null, title: data.title || '새 일정', memo: null
+            });
+            if (!res.success && res.message) alert(res.message);
+        } else if (data.id) {
+            const existing = items.find(i => i.id === data.id);
+            if (!existing) return;
+            await window.api.patch(`/api/planner/items/${data.id}?startMinute=${startMinute}&durationMinute=${existing.durationMinute}&dayIndex=${day}`)
+                .then(res => {
+                    if (!res.success && res.message) alert(res.message);
+                });
+        }
+        await reload();
+    }
+
+    /* ---------------------------------------------------------------------
+       일정 추가
+       --------------------------------------------------------------------- */
+    /**
+     * "+" 버튼으로 넣는 일정의 시작 시각 - 그날 마지막 일정이 끝나는 시각(30분 단위로 올림).
+     * 예전엔 항상 12:00 에 넣어서 여러 개를 추가하면 같은 자리에 겹쳐 앞 일정이 가려졌다.
+     * 그날 일정이 없으면 10:00, 자정을 넘기면 그날 마지막 가능한 칸에 넣는다.
+     */
+    function nextFreeStart(day, durationMinute) {
+        const ends = items.filter(it => it.dayIndex === day).map(it => it.startMinute + it.durationMinute);
+        if (!ends.length) return 10 * 60;
+        const start = Math.ceil(Math.max(...ends) / SLOT_MIN) * SLOT_MIN;
+        return Math.min(start, END_HOUR * 60 - Math.max(durationMinute, SLOT_MIN));
+    }
+
+    // 편집권이 없으면 추가 버튼을 눌러도 조용히 실패하지 말고 이유를 알려준다
+    function canEditNow() {
+        if (typeof IS_LOCK_HOLDER === 'undefined' || IS_LOCK_HOLDER) return true;
+        alert('지금은 편집권이 있는 사람만 일정을 추가할 수 있어요. 방장에게 편집권을 요청해보세요.');
+        return false;
+    }
+    async function addBlank(dayKey) {
+        const title = prompt('항목 이름을 입력하세요', '새로운 일정');
+        if (!title) return;
+        const day = parseInt(dayKey.replace('d', ''), 10) || 1;
+        await window.api.post(`/api/planner/${SCHEDULE_ID}/items`, {
+            dayIndex: day, startMinute: nextFreeStart(day, 60), durationMinute: 60, activityId: null, title: title, memo: null
+        });
+        await reload();
+    }
+
+    /* ---------------------------------------------------------------------
+       AI 추천 챗봇
+       --------------------------------------------------------------------- */
+    function bubble(text, who) {
+        const c = document.getElementById('chat');
+        if (!c) return;
+        const div = document.createElement('div');
+        div.className = 'msg ' + who;
+        div.textContent = text;
+        c.appendChild(div);
+        c.scrollTop = c.scrollHeight;
+        return div;
+    }
+
+    // [TNSM-72] 추천 목록은 날씨와 상관없이 전부 보여주고, 실제로 일정에 추가하는 순간에만
+    // 날씨를 확인해서 안 좋으면 "그래도 추가하시겠어요?" 라고 물어본다.
+    // "며칠차"에 넣는지에 따라 그 날짜(출발일 + dayIndex-1)의 날씨를 확인한다.
+    function dateForDay(dayIndex) {
+        if (typeof TRIP_START_DATE === 'undefined' || !TRIP_START_DATE) {
+            return new Date().toISOString().slice(0, 10);
+        }
+        const d = new Date(TRIP_START_DATE + 'T00:00:00');
+        d.setDate(d.getDate() + (Math.max(1, dayIndex || 1) - 1));
+        return d.toISOString().slice(0, 10);
+    }
+
+    async function confirmWeatherOk(target, dayIndex) {
+        if (!target) return true;
+        const activityId = target.activityId;
+        const lat = target.latitude, lon = target.longitude;
+        if (!activityId && (lat == null || lon == null)) return true;
+        try {
+            const targetDate = dateForDay(dayIndex);
+            const url = activityId
+                ? `/api/weather/check?activityId=${activityId}&date=${encodeURIComponent(targetDate)}`
+                : `/api/weather/check-coords?lat=${lat}&lon=${lon}&venueType=${encodeURIComponent(target.venueType || '')}&date=${encodeURIComponent(targetDate)}`;
+            const res = await window.api.get(url);
+            if (res.success && res.data && res.data.recommendable === false) {
+                return confirm(`${res.data.message}\n\n그래도 추가하시겠어요?`);
+            }
+        } catch (e) {
+            // 날씨 체크가 실패해도 추가 자체를 막지는 않는다.
+        }
+        return true;
+    }
+
+    function recCards(list) {
+        const chat = document.getElementById('chat');
+        if (!chat || !list.length) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'rec-list';
+        list.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'rec-card';
+            card.draggable = (typeof IS_LOCK_HOLDER === 'undefined' || IS_LOCK_HOLDER);
+            card.dataset.payload = JSON.stringify({
+                kind: item.kind || 'recommend',
+                activityId: item.activityId || null,
+                title: item.title,
+                durationMin: item.durationMin,
+                latitude: item.latitude != null ? item.latitude : null,
+                longitude: item.longitude != null ? item.longitude : null,
+                venueType: item.venueType || null
+            });
+            // 예전엔 \${...} 로 이스케이프돼 있어 "${item.priceKrw.toLocaleString()}" 글자가 그대로 보였다.
+            const priceText = item.priceKrw ? ` · ${Number(item.priceKrw).toLocaleString()}원` : '';
+            card.innerHTML = `
+              <span class="sw" style="background:var(--cat-festival)"></span>
+              <span class="info">
+                <span class="t">${escapeHtml(item.title)}</span>
+                <span class="m">${item.durationMin}분 소요${priceText}</span>
+              </span>
+              <button class="put" title="계획표에 추가">+</button>`;
+
+            card.addEventListener('dragstart', e => {
+                e.dataTransfer.setData('text/plain', card.dataset.payload);
+            });
+            card.querySelector('.put').addEventListener('click', async () => {
+                if (!canEditNow()) return;
+                if (!(await confirmWeatherOk({ activityId: item.activityId, latitude: item.latitude, longitude: item.longitude, venueType: item.venueType }, 1))) return;
+                const finalDuration = (!isNaN(parseInt(item.durationMin)) && parseInt(item.durationMin) > 0) ? parseInt(item.durationMin) : 60;
+                  const res = await window.api.post(`/api/planner/${SCHEDULE_ID}/items`, {
+                      dayIndex: 1, startMinute: nextFreeStart(1, finalDuration), durationMinute: finalDuration,
+                      activityId: item.activityId || null, title: item.title || '새 일정', memo: item.description || null
+                  });
+                  if(!res.success && res.message) { alert(res.message); } else { await reload(); }
+              });
+            wrap.appendChild(card);
+        });
+        chat.appendChild(wrap);
+        chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function ask(text, keywordOverride = null) {
+        if (!text.trim() && !keywordOverride && keywordOverride !== '') return;
+        if (text) bubble(text, 'me');
+        const inp = document.getElementById('ai-text');
+        if (inp) inp.value = '';
+
+        const chat = document.getElementById('chat');
+        if (!chat) return;
+        const typing = document.createElement('div');
+        typing.className = 'msg bot typing';
+        typing.innerHTML = '<span></span><span></span><span></span>';
+        chat.appendChild(typing);
+        chat.scrollTop = chat.scrollHeight;
+
+        try {
+            // 날씨 판단용 날짜 - 파티 출발일(없으면 오늘). 예전엔 '2027-10-14' 로 고정돼 있었다.
+            const tripDate = (typeof TRIP_START_DATE !== 'undefined' && TRIP_START_DATE) ? TRIP_START_DATE : new Date().toISOString().slice(0, 10);
+            const qs = new URLSearchParams({ date: tripDate, region: TOUR_REGION });
+            if (keywordOverride !== null) {
+                if (keywordOverride) qs.set('keyword', keywordOverride);
+            } else {
+                qs.set('keyword', text);
+            }
+            const result = await window.api.get(`/api/planner/${SCHEDULE_ID}/recommend?` + qs.toString());
+            typing.remove();
+            
+            if (!result.success) {
+                bubble('오류: ' + (result.message || '알 수 없는 서버 에러'), 'bot');
+            } else if (result.data && result.data.length > 0) {
+                bubble('추천 일정을 찾았습니다! 카드를 계획표로 드래그 해보세요.', 'bot');
+                recCards(result.data);
+            } else {
+                bubble('조건에 맞는 일정을 찾지 못했습니다 (검색어/지역 확인).', 'bot');
+            }
+        } catch(e) {
+            typing.remove();
+            bubble('오류가 발생했습니다.', 'bot');
+        }
+    }
+
+    document.body.addEventListener('click', e => {
+        if (e.target.closest('#ai-send')) {
+            const input = document.getElementById('ai-text');
+            if (input) ask(input.value);
+        }
+    });
+
+    document.body.addEventListener('keydown', e => {
+        if (e.target.id === 'ai-text' && e.key === 'Enter') {
+            ask(e.target.value);
+        }
+    });
+
+    document.querySelectorAll('#quick button').forEach(b => {
+        b.addEventListener('click', () => ask(b.textContent, ''));
+    });
+
+    /* ---------------------------------------------------------------------
+       데이터 로딩 및 소켓
+       --------------------------------------------------------------------- */
+    async function reload() {
+        const result = await window.api.get(`/api/planner/${SCHEDULE_ID}/items`);
+        if (result.success) {
+            items = result.data;
+            render();
+        }
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function connectRealtime() {
+        if (typeof SockJS === 'undefined') return;
+        const socket = new SockJS('/ws');
+        const stomp = Stomp.over(socket);
+        stomp.debug = null;
+        stomp.connect({}, () => {
+            stomp.subscribe(`/topic/planner/${SCHEDULE_ID}`, (message) => {
+                items = JSON.parse(message.body);
+                render();
+            });
+        });
+    }
+
+    const cp = document.getElementById('custom-slot-color');
+    if (cp) {
+        cp.value = localStorage.getItem('custom-slot-color') || '#ffa500';
+        document.documentElement.style.setProperty('--custom-slot-color', cp.value);
+        cp.addEventListener('input', e => {
+            localStorage.setItem('custom-slot-color', e.target.value);
+            document.documentElement.style.setProperty('--custom-slot-color', e.target.value);
+        });
+    }
+
+    
+    
+    document.getElementById('btn-add-day')?.addEventListener('click', async () => {
+        if (typeof IS_LOCK_HOLDER !== 'undefined' && !IS_LOCK_HOLDER) return;
+        DAY_COUNT++;
+        buildDays();
+        buildGrid();
+        await window.api.patch(`/api/planner/${SCHEDULE_ID}/days?days=${DAY_COUNT}`);
+        reload();
+    });
+    document.getElementById('btn-remove-day')?.addEventListener('click', async () => {
+        if (typeof IS_LOCK_HOLDER !== 'undefined' && !IS_LOCK_HOLDER) return;
+        if (DAY_COUNT <= 1) {
+            alert('최소 1일은 있어야 합니다.');
+            return;
+        }
+        if (confirm(`정말 마지막 날(${DAY_COUNT}일차)을 삭제하시겠습니까? 해당 일차의 모든 일정이 삭제될 수 있습니다.`)) {
+            DAY_COUNT--;
+            buildDays();
+            buildGrid();
+            await window.api.patch(`/api/planner/${SCHEDULE_ID}/days?days=${DAY_COUNT}`);
+            reload();
+        }
+    });
+    document.getElementById('btn-add')?.addEventListener('click', () => {
+        if (typeof IS_LOCK_HOLDER !== 'undefined' && !IS_LOCK_HOLDER) return;
+        showEditModal('', '', '#4b6b4a', async (newTitle, newMemo, newColor) => {
+            if (newTitle !== '') {
+                // [TNSM-70] dayIndex 가 0으로 고정돼 있었는데 서버는 dayIndex >= 1 만
+                // 받는다(ScheduleItemRequest @Min(1)) - 실제로 눌러보니 매번 400이
+                // 나면서도 응답을 확인 안 해 조용히 실패하고 있었다(눌러도 아무 일도
+                // 안 생기는 것처럼 보임). 다른 곳(addBlank)과 같이 1일차를 기본값으로.
+                const res = await window.api.post(`/api/planner/${SCHEDULE_ID}/items`, {
+                    dayIndex: 1,
+                    startMinute: 600, // default 10:00 AM
+                    durationMinute: 60,
+                    activityId: null,
+                    title: newTitle,
+                    memo: newMemo,
+                    color: newColor
+                });
+                if (res && !res.success && res.message) alert(res.message);
+                reload();
+            }
+        });
+    });
+
+    document.getElementById('btn-clear')?.addEventListener('click', async () => {
+        if (typeof IS_LOCK_HOLDER !== 'undefined' && !IS_LOCK_HOLDER) return;
+        if (confirm('자동 일정을 제외한 모든 커스텀/추천 일정을 지웁니다. 초기화하시겠습니까?')) {
+            // we delete everything non-fixed
+            // [TNSM-70] 여기도 window.api.delete(존재하지 않음) 오타라 첫 항목에서 바로
+            // TypeError 로 죽어 "전체 비우기"가 아예 동작하지 않았다.
+            for (const item of items) {
+                if (item.source !== 'package_default') {
+                    await window.api.del(`/api/planner/items/${item.id}`);
+                }
+            }
+            reload();
+        }
+    });
+
+        const ctc = document.getElementById('custom-text-color');
+    if (ctc) {
+        ctc.value = localStorage.getItem('custom-text-color') || '#4b6b4a';
+        document.documentElement.style.setProperty('--custom-text-color', ctc.value);
+        ctc.addEventListener('input', e => {
+            localStorage.setItem('custom-text-color', e.target.value);
+            document.documentElement.style.setProperty('--custom-text-color', e.target.value);
+            // Also override the inline style of all blocks if they were using the global one
+            document.querySelectorAll('.block .t').forEach(el => {
+                if (!el.style.color || el.style.color === 'inherited' || el.style.color === '') {
+                    el.style.color = e.target.value;
+                }
+            });
+        });
+    }
+
+    buildGrid();
+    reload();
+    connectRealtime();
+    
+    document.getElementById('btn-submit')?.addEventListener('click', async () => {
+        // 파티방 "일정 픽스 투표" 결과를 보여 주고 확정 - 투표와 제출이 다른 화면이라 이어 준다.
+        // 투표 결과가 제출을 막지는 않는다(의견 모으기용). 조회 실패 시 예전 문구로.
+        let msg = '제출하시겠습니까?';
+        try {
+            const t = await window.api.get(`/api/planner/${SCHEDULE_ID}/vote/tally`);
+            if (t.success && t.data) {
+                msg = `현재 파티 투표: 👍 찬성 ${t.data.agree} · 👎 반대 ${t.data.disagree}\n이 일정으로 확정할까요? 제출하면 되돌릴 수 없어요.`;
+            }
+        } catch (e) { /* 예전 문구 그대로 */ }
+        if (!confirm(msg)) return;
+        const r = await window.api.post(`/api/planner/${SCHEDULE_ID}/submit`, {});
+        alert(r.message);
+        if (r.success) location.reload();
+    });
+
+    document.getElementById('btn-ai-validate')?.addEventListener('click', async () => {
+        const modeElem = document.getElementById('transit-mode');
+        const mode = modeElem && modeElem.value === 'car' ? '자동차' : '대중교통';
+        const btn = document.getElementById('btn-ai-validate');
+        const oldText = btn.textContent;
+        btn.textContent = '검증 중...';
+        btn.disabled = true;
+
+        // 결과는 옆 패널의 타미 탭에 남긴다(예전 💬 대화하기 위젯은 제거됨).
+        window.showChatTab?.('tami');
+        const tag = `[AI 검증 · ${mode}] `;
+        const wait = bubble(`${mode} 기준으로 일정을 검증하고 있어요...`, 'sys');
+
+        try {
+            const res = await window.api.post(`/api/planner/${SCHEDULE_ID}/ai-validate?mode=${encodeURIComponent(mode)}`, {});
+            wait?.remove();
+            if (res.success) {
+                if (res.data.applied > 0) {
+                    res.data.briefing += `\n\n✅ 추천 일정 ${res.data.applied}개를 계획표에 반영하고 'AI 추천 반영'으로 저장했어요.`;
+                }
+                bubble(tag + res.data.briefing, 'bot');
+                await reload();
+            } else {
+                bubble(tag + '검증에 실패했습니다. ' + (res.message || ''), 'bot');
+            }
+        } catch (e) {
+            wait?.remove();
+            bubble(tag + '오류가 발생했습니다.', 'bot');
+        } finally {
+            btn.textContent = oldText;
+            btn.disabled = false;
+        }
+    });
+
+})();
