@@ -1,35 +1,30 @@
 # Render 배포 가이드 (포트폴리오 데모용)
 
-구성: **Render(웹 서비스, Docker)** + **외부 MySQL** (Render 는 MySQL 을 제공하지 않음).
+구성: **Render(웹 서비스, Docker)** + **TiDB Cloud** (Render 는 MySQL 을 제공하지 않음).
 GitHub Pages 정적 데모(`pages/`)와는 별개로, 로그인·파티·플래너·채팅이 실제 동작하는 서비스를 띄운다.
 
-## 1. MySQL 준비
-Aiven / TiDB Cloud 등 무료 MySQL 8 하나를 만들고 호스트·포트·계정·비밀번호를 확보한다(`utf8mb4`).
+## 1. TiDB Cloud 준비
+TiDB Cloud Starter(무료) 클러스터를 만들고 Connect → General 에서 Host / Port(4000) / Username(`xxxx.root`) / Password 를 확보한다. Allowed IP 는 `0.0.0.0/0`(Render 무료 플랜은 고정 IP 없음).
+TLS 가 필수이며, 앱의 기본 JDBC URL 은 `useSSL=false` 라서 아래 3번처럼 `SPRING_DATASOURCE_URL` 로 덮어써야 한다.
 
 ## 2. DB 초기화 (최초 1회, 로컬에서 실행)
-앱을 먼저 켜지 말고 아래 순서로 넣는다(`src/main/resources/db/README.md` 의 필수 순서와 동일).
-
 ```
-cd tanoshimi
-for f in schema data migration_v16_mypage_titles migration_v16_planner_manner_ai \
-         migration_v17_titles_catalog migration_v18_email_verification \
-         migration_v18_titles_distance_tiers migration_v19_my_trips \
-         migration_v19_temporary_password migration_v20_usernames; do
-  mysql -h <HOST> -P <PORT> -u <USER> -p --default-character-set=utf8mb4 < src/main/resources/db/$f.sql
-done
+mysql -h <HOST> -P 4000 -u <USER> --ssl-mode=REQUIRED --default-character-set=utf8mb4 -p < src/main/resources/db/schema.sql
+mysql -h <HOST> -P 4000 -u <USER> --ssl-mode=REQUIRED --default-character-set=utf8mb4 -p tanoshimi < src/main/resources/db/data.sql
 ```
-- 매니지드 DB 가 데이터베이스 생성을 막으면 `schema.sql` 상단의 `CREATE DATABASE`/`USE` 를 지우고 DB 이름을 맞춘다.
-- 데모 데이터가 필요하면 `demo_mypage_seed.sql` 도 실행(DB README 참고).
+- `schema.sql` 만으로 최신 스키마가 만들어진다. **`migration_*.sql` 은 실행하지 않는다.** 특히 `migration_v20_usernames.sql` 은 저장 프로시저(`CREATE PROCEDURE`)를 쓰는데 TiDB 는 지원하지 않는다.
+- 로컬 DB 의 데이터를 그대로 옮기려면(데모 화면과 동일): 로컬에서 `mysqldump --no-create-info --complete-insert --skip-triggers tanoshimi > dump.sql` 후, TiDB 의 기존 행을 비우고(`SET FOREIGN_KEY_CHECKS=0;` 아래에서 `TRUNCATE`) `dump.sql` 을 넣는다.
+- 업로드 이미지 파일은 DB 에 없어서 옮겨지지 않는다.
 
 ## 3. Render 서비스 생성
 1. Render → New → **Blueprint** → 이 저장소 선택(루트 `render.yaml` 사용).
-2. `sync: false` 인 값 입력: `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD` (`DB_PORT`/`DB_NAME` 이 다르면 수정).
+2. `sync: false` 인 값 입력: `SPRING_DATASOURCE_URL`(TLS 옵션 포함, `render.yaml` 주석 참고), `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, OAuth·SMTP 값.
 3. 배포 후 `https://<서비스>.onrender.com/login` 확인.
 
 ## 환경변수 요약
 | 키 | 설명 |
 |---|---|
-| `DB_HOST/PORT/NAME/USERNAME/PASSWORD` | 외부 MySQL 접속 정보 |
+| `SPRING_DATASOURCE_URL/USERNAME/PASSWORD` | TiDB 접속 정보(`sslMode=REQUIRED` 필수) |
 | `SERVER_FORWARD_HEADERS_STRATEGY=framework` | Render 프록시(HTTPS) 뒤에서 `{baseUrl}`·WebSocket 이 https 로 인식되게 함 |
 | `SERVER_SERVLET_SESSION_COOKIE_SECURE=true` | HTTPS 쿠키(application.yml 주석의 "배포 시 true") |
 | `REMEMBER_ME_KEY` | 자동 로그인 서명 키 — Render 가 자동 생성 |
