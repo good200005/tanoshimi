@@ -7,7 +7,9 @@
 services:
   db:
     image: mysql:8.0
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    # --character-set-client-handshake=false: 초기화 SQL(data.sql)을 읽는 mysql 클라이언트가 컨테이너의
+    # 로케일 때문에 latin1 로 동작해 한글이 깨지는(UTF-8 바이트가 latin1 로 해석) 문제를 막는다.
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --character-set-client-handshake=false
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: tanoshimi
