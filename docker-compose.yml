@@ -1,0 +1,50 @@
+# 로컬에서 한 줄로 실행: docker compose up --build  ->  http://localhost:8080
+#
+# MySQL 8 + 앱. 최초 기동 시 schema.sql / data.sql(데모 데이터, 모든 계정 비번 Test1234!)을 자동 적용한다.
+# 외부 연동(SMS·날씨·번역·AI)은 전부 mock, 이메일 인증번호는 앱 콘솔 로그에 출력된다(docker compose logs -f app).
+# 소셜 로그인은 client-id/secret 이 비면 앱이 기동하지 않으므로 dummy 로 채운다(소셜 버튼만 동작 안 함).
+# DB 를 초기화하려면: docker compose down -v
+services:
+  db:
+    image: mysql:8.0
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: tanoshimi
+      MYSQL_USER: tanoshimi
+      MYSQL_PASSWORD: tanoshimi
+      TZ: Asia/Seoul
+    volumes:
+      - db-data:/var/lib/mysql
+      # 파일명 순서대로 실행된다(01 -> 02)
+      - ./tanoshimi/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./tanoshimi/src/main/resources/db/data.sql:/docker-entrypoint-initdb.d/02-data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  app:
+    build:
+      context: ./tanoshimi
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: tanoshimi
+      DB_USERNAME: tanoshimi
+      DB_PASSWORD: tanoshimi
+      GOOGLE_CLIENT_ID: dummy
+      GOOGLE_CLIENT_SECRET: dummy
+      NAVER_CLIENT_ID: dummy
+      NAVER_CLIENT_SECRET: dummy
+      LINE_CLIENT_ID: dummy
+      LINE_CLIENT_SECRET: dummy
+
+volumes:
+  db-data:
